@@ -1,0 +1,11 @@
+{
+  "id": "{{ticket.id}}",
+  "group_name": "{{ticket.group.name}}",
+  "title": "{{ticket.subject}}",
+  "ticket_description": "{{ticket.description}}",
+  "ticket_tags": "{{ticket.tags}}",
+  "content": "{{ticket.latest_public_comment}}",
+  "status": "{{ticket.status}}",
+  "public_url": "{{ticket.public_url}}",
+  "cf_shipping_address": "{{ticket.cf_shipping_address}}"
+}
