@@ -1,6 +1,6 @@
 const express = require("express");
 const bodyParser = require("body-parser");
-const { appendRowToSheet } = require("./handle-sheets");
+const { appendRowToSheet, getAuthUrl, saveTokenFromCode, isTokenValid } = require("./handle-sheets");
 const app = express();
 const PORT = 3000;
 
@@ -9,6 +9,12 @@ app.use(bodyParser.json());
 
 // Webhook endpoint
 app.post("/webhook", async (req, res) => {
+    if (!isTokenValid()) {
+        console.warn("🚫 Webhook ignored because server is not authorized to Google Sheets yet.");
+        console.warn("👉 Please visit http://localhost:3000/auth first.");
+        return res.status(401).json({ error: "Missing Google authorization. Visit /auth" });
+    }
+
     console.log("📩 Webhook received:");
     console.log(req.body);
 
@@ -16,11 +22,18 @@ app.post("/webhook", async (req, res) => {
         // Format the data you want to save. For example, saving the timestamp and the raw JSON body
         //const rowData = [new Date().toISOString(), JSON.stringify(req.body)];
         const ticket = req.body;
+        const removeHtmlTags = (val) => {
+            if (typeof val === 'string') {
+                return val.replace(/<[^>]*>?/gm, '').replace(/&nbsp;/g, ' ').trim();
+            }
+            return val || '';
+        };
+
         const rowData = [
             ticket.id,
             ticket.group_name,
             ticket.title,
-            ticket.ticket_description,
+            removeHtmlTags(ticket.ticket_description),
             ticket.ticket_tags,
             ticket.content,
             ticket.status,
@@ -41,6 +54,27 @@ app.post("/webhook", async (req, res) => {
             message: "Webhook received but failed to update Google Sheet",
             error: error.message
         });
+    }
+});
+
+// OAuth 2.0 Auth Flow endpoints
+app.get("/auth", (req, res) => {
+    try {
+        const url = getAuthUrl();
+        res.redirect(url);
+    } catch (e) {
+        res.status(500).send("Error generating auth url: " + e.message);
+    }
+});
+
+app.get("/oauth2callback", async (req, res) => {
+    const code = req.query.code;
+    if (!code) return res.send("No code provided by Google.");
+    try {
+        await saveTokenFromCode(code);
+        res.send("<h1>✅ Success! Token generated and saved.</h1><p>The webhook server is now fully authorized to write to Google Sheets. You can close this tab.</p>");
+    } catch (e) {
+        res.status(500).send("Error saving token: " + e.message);
     }
 });
 
