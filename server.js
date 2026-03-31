@@ -22,9 +22,20 @@ app.post("/webhook", async (req, res) => {
         // Format the data you want to save. For example, saving the timestamp and the raw JSON body
         //const rowData = [new Date().toISOString(), JSON.stringify(req.body)];
         const ticket = req.body;
-        const removeHtmlTags = (val) => {
+        
+        // Helper to strip HTML, decode common entities, and remove excessive whitespace
+        const cleanText = (val) => {
             if (typeof val === 'string') {
-                return val.replace(/<[^>]*>?/gm, '').replace(/&nbsp;/g, ' ').trim();
+                return val
+                    .replace(/<[^>]*>?/gm, '')     // Remove HTML tags
+                    .replace(/&nbsp;/gi, ' ')      // Replace non-breaking space
+                    .replace(/&amp;/gi, '&')       // Revert ampersand
+                    .replace(/&lt;/gi, '<')        // Revert less-than
+                    .replace(/&gt;/gi, '>')        // Revert greater-than
+                    .replace(/&quot;/gi, '"')      // Revert quotes
+                    .replace(/&#39;/gi, "'")       // Revert apostrophe
+                    .replace(/\s+/g, ' ')          // Collapse all multiple whitespace/newlines into a single space
+                    .trim();
             }
             return val || '';
         };
@@ -32,10 +43,10 @@ app.post("/webhook", async (req, res) => {
         const rowData = [
             ticket.id,
             ticket.group_name,
-            ticket.title,
-            removeHtmlTags(ticket.ticket_description),
+            cleanText(ticket.title),
+            cleanText(ticket.ticket_description),
             ticket.ticket_tags,
-            ticket.content,
+            cleanText(ticket.content),
             ticket.status,
             ticket.public_url,
             new Date().toLocaleString(),
@@ -77,6 +88,26 @@ app.get("/oauth2callback", async (req, res) => {
         res.status(500).send("Error saving token: " + e.message);
     }
 });
+
+// order checking endpoint
+app.post("/order-checking", async (req, res) => {
+    try {
+        console.log("Handle order checking");
+        res.status(200).json({
+            message: "Return order checking data"
+        });
+    } catch (error) {
+        res.status(500).json({
+            message: "Webhook received but failed to update Google Sheet",
+            error: error.message
+        });
+    }
+});
+
+// order checking endpoint end
+
+
+
 
 // Health check
 app.get("/", (req, res) => {
