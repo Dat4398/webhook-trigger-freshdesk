@@ -90,12 +90,16 @@ app.get("/oauth2callback", async (req, res) => {
 });
 
 // order checking endpoint
-app.post("/order-checking", async (req, res) => {
+app.get("/order-checking", async (req, res) => {
+    const query = req.query;
+    console.log(JSON.stringify(query));
     try {
-        console.log("Handle order checking");
-        res.status(200).json({
-            message: "Return order checking data"
-        });
+        const fakeData = {
+            order_id: "123456789",
+            status: "shipping",
+            tracking_url: "https://www.17track.net/en/track?nums=123456789"
+        }
+        res.status(200).json(fakeData);
     } catch (error) {
         res.status(500).json({
             message: "Webhook received but failed to update Google Sheet",
