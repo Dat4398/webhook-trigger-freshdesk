@@ -108,11 +108,6 @@ app.get("/order-checking", async (req, res) => {
     }
 });
 
-// order checking endpoint end
-
-
-
-
 // Health check
 app.get("/", (req, res) => {
     res.send("Webhook server is running 🚀 --");
