@@ -1,0 +1,5800 @@
+{
+  "name": "main-flow",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "filters": {}
+      },
+      "id": "69b3e9ed-30a2-4c3b-8536-735b864dd4a2",
+      "name": "Gmail trigger",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "position": [
+        -3632,
+        608
+      ],
+      "typeVersion": 1,
+      "alwaysOutputData": false,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "MKNt51yMsiVMWsZk",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "messageId": "={{ $json.id }}"
+      },
+      "id": "f1456be1-9ffa-47e8-a035-0fb0f1757703",
+      "name": "Get message content",
+      "type": "n8n-nodes-base.gmail",
+      "position": [
+        -2800,
+        512
+      ],
+      "typeVersion": 2.1,
+      "webhookId": "fa25f955-a44d-48b1-b591-36df1084412b",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "MKNt51yMsiVMWsZk",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fields": {
+          "values": [
+            {
+              "name": "label",
+              "stringValue": "={{ $json.label }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b46236d9-4fa1-46a2-bac5-d27df7e84a20",
+      "name": "Set label values",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        -1968,
+        736
+      ],
+      "typeVersion": 3.2
+    },
+    {
+      "parameters": {
+        "resource": "label",
+        "returnAll": true
+      },
+      "id": "6dedba50-725b-4a14-9156-ab45c2b3175d",
+      "name": "Get all labels",
+      "type": "n8n-nodes-base.gmail",
+      "position": [
+        -1376,
+        640
+      ],
+      "typeVersion": 2.1,
+      "webhookId": "d5804468-2ef9-4348-9099-29fa52b79788",
+      "alwaysOutputData": true,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "MKNt51yMsiVMWsZk",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "=label",
+        "include": "allOtherFields",
+        "options": {}
+      },
+      "id": "1810b6ba-726c-446f-bbd7-da9d31ab4125",
+      "name": "Split out assigned labels",
+      "type": "n8n-nodes-base.splitOut",
+      "position": [
+        -1376,
+        768
+      ],
+      "typeVersion": 1,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "mergeByFields": {
+          "values": [
+            {
+              "field1": "name",
+              "field2": "label"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d905d351-937b-4ad7-93c3-ef5bab9fe011",
+      "name": "Merge corresponding labels",
+      "type": "n8n-nodes-base.merge",
+      "position": [
+        -1136,
+        752
+      ],
+      "typeVersion": 2.1,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "fieldsToAggregate": {
+          "fieldToAggregate": [
+            {
+              "fieldToAggregate": "id",
+              "renameField": true,
+              "outputFieldName": "id"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c63fc760-e2fd-440b-9d33-7015184c93be",
+      "name": "Aggregate label IDs",
+      "type": "n8n-nodes-base.aggregate",
+      "position": [
+        -688,
+        1200
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "prompt": "=Email:\n  Subject: {{ $json.Subject }}\n  Content:\n  \"\"\"\n{{ $('Get message content').item.json.snippet }}\n  \"\"\"\nFrom: {{ $json.From }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "=Classify into:\n- Escalated to Bot (order status, tracking, product info, unreceived order)\n- Escalated to CS (complaint, delivery issue, refund, address change)\n- Notification (system, ads, no request)\n\nSpecial rules:\n- Unreceived order → Escalated to Bot\n- Delivery issue → Escalated to CS\n- Chargeback subject → Notification\n- Design/custom request → Escalated to CS\n- If forwarded → use original message\n\n---\n\nExtract:\n\norder_number:\n- Match only: #BCMC\\d{6} | #\\d{6} | BCMC\\d{6}\n- Normalize → prepend \"#\" if missing\n- Else → null\n\ncustomer_name:\n- From sender / signature\n- Else → null\n\n---\n\nIntent (EXACT):\n\"Order Status Inquiry\"\n\"Shipping Issue\"\n\" Complaint\"\n\"Refund Request\"\n\"Product Inquiry\"\n\"Change Request\"\n\"Change Address shipping.\"\n\"IncorrectInformation order.\"\n\n---\n\nSentiment:\nPositive | Neutral | Negative\n\n---\n\nNumber token:\nGet exactly the number token did used for this prompt.\n\nOutput JSON:\n{\n  \"label\": \"Escalated to Bot\" | \"Escalated to CS\" | \"Notification\",\n  \"is_customer\": boolean,\n  \"customer_intent\": string,\n  \"confidence_score\": number,\n  \"sentiment\": \"Positive\" | \"Neutral\" | \"Negative\",\n  \"order_number\": string | null,\n  \"customer_name\": string | null,\n  \"request_details\": string,\n  \"number_token\": number\n}"
+            }
+          ]
+        }
+      },
+      "id": "0e0f11ea-0fb7-4476-bd98-3ad3886f9d7a",
+      "name": "Assign labels for message",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "position": [
+        -2368,
+        512
+      ],
+      "typeVersion": 1.3,
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "content": "## Add AI labels to Gmail messages\nWith this workflow you can automatically set labels for your Gmail message according to its content. \n\nIn this workflow available are 3 labels: \"Partnership\", \"Inquiry\" and \"Notification\". Feel free to adjust labels according to your needs. \n\n**Please remember to set label names both in your Gmail account and workflow.**",
+        "height": 240.57943708322733,
+        "width": 420.4803040774015,
+        "color": 4
+      },
+      "id": "2e5e5150-696f-42a0-a9a1-3baf29f67027",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -4080,
+        448
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## ⚠️ Note\n\n1. Complete video guide for this workflow is available [on my YouTube](https://youtu.be/a8Dhj3Zh9vQ). \n2. Remember to add your credentials and configure nodes (covered in the video guide).\n3. If you like this workflow, please subscribe to [my YouTube channel](https://www.youtube.com/@workfloows) and/or [my newsletter](https://workfloows.com/).\n\n**Thank you for your support!**",
+        "height": 257.42916378714597,
+        "width": 421.0932411886662
+      },
+      "id": "7406b416-9244-41df-b796-ba438fb91f89",
+      "name": "Sticky Note1",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -4080,
+        736
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "### Gmail Trigger\nReceive data from Gmail about new incoming message. \n\n⚠️ Set polling interval according to your needs.",
+        "height": 317,
+        "width": 190
+      },
+      "id": "b4f98c28-894a-4511-8312-e60271379a1f",
+      "name": "Sticky Note2",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -3648,
+        432
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "⚠️ **Label names in system prompt and JSON schema should be the same.**",
+        "height": 191,
+        "width": 194
+      },
+      "id": "f91d0620-bff3-4c36-86fe-a2ac77f73b67",
+      "name": "Sticky Note4",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -2208,
+        624
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "### Aggregarte labels \nCreate array of label IDs and add to the desired email message in Gmail.",
+        "height": 411,
+        "width": 692
+      },
+      "id": "6a7a675e-b7d3-4107-8b59-fd2248457bd1",
+      "name": "Sticky Note6",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -736,
+        912
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "### Get message content\nBased on Gmail message ID retrieve body content of the email and pass it to AI chain.",
+        "height": 301,
+        "width": 222
+      },
+      "id": "5b0059dd-3a88-4b1c-9a24-e06f29e63fcc",
+      "name": "Sticky Note7",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -2864,
+        352
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "### Assign labels\nLet the AI decide which labels suit the best content of the message.\n\n⚠️ **Remember to edit system prompt** - modify label names and instructions according to your needs.",
+        "height": 285,
+        "width": 390
+      },
+      "id": "953c4b98-f963-4b85-9c6f-4fe84736201d",
+      "name": "Sticky Note8",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -2400,
+        336
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "jsonSchema": "{\n  \"type\": \"object\",\n  \"required\": [\n    \"label\",\n    \"is_customer\",\n    \"customer_intent\",\n    \"confidence_score\",\n    \"sentiment\",\n    \"order_number\",\n    \"customer_name\",\n    \"request_details\"\n  ],\n  \"properties\": {\n    \"label\": {\n      \"type\": \"string\",\n      \"enum\": [\"Escalated to Bot\", \"Notification\", \"Escalated to CS\"],\n      \"description\": \"Classification label indicating how the message should be handled.\"\n    },\n    \"is_customer\": {\n      \"type\": \"boolean\",\n      \"description\": \"Indicates whether the message is from a customer.\"\n    },\n    \"customer_intent\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"Order Status Inquiry\",\n        \"Shipping Issue\",\n        \"Complaint\",\n        \"Refund Request\",\n        \"Product Inquiry\",\n        \"Change Request\",\n        \"Change Address Shipping\",\n        \"Incorrect Order Information\"\n      ],\n      \"description\": \"Categorized intent of the customer message.\"\n    },\n    \"confidence_score\": {\n      \"type\": \"number\",\n      \"minimum\": 0,\n      \"maximum\": 1,\n      \"description\": \"Confidence score of the classification (0 to 1).\"\n    },\n    \"sentiment\": {\n      \"type\": \"string\",\n      \"enum\": [\"Positive\", \"Neutral\", \"Negative\"],\n      \"description\": \"Detected sentiment of the message.\"\n    },\n    \"order_number\": {\n      \"type\": [\"string\", \"null\"],\n      \"pattern\": \"^#BCMC\\\\d{6}$\",\n      \"description\": \"Order number in format #BCMC followed by 6 digits, or null if not available.\"\n    },\n    \"customer_name\": {\n      \"type\": [\"string\", \"null\"],\n      \"description\": \"Customer name if available, otherwise null.\"\n    },\n    \"request_details\": {\n      \"type\": \"string\",\n      \"description\": \"Detailed explanation of the customer's request.\"\n    },\"number_token\": {\n      \"type\": \"number\"\n    }\n  },\n  \"additionalProperties\": false\n}"
+      },
+      "id": "d04267f7-d282-4aab-b199-031aa9f7c70c",
+      "name": "JSON Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "position": [
+        -2160,
+        704
+      ],
+      "typeVersion": 1,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "model": "gpt-5.4-mini",
+        "options": {
+          "frequencyPenalty": 0,
+          "responseFormat": "json_object"
+        }
+      },
+      "id": "b29cfe62-e311-410a-a410-943b8aad9ba9",
+      "name": "OpenAI Chat",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "position": [
+        -2352,
+        704
+      ],
+      "typeVersion": 1,
+      "alwaysOutputData": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "5XZWXNch1DTk8ZxA",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "Model is free but it can limit",
+        "height": 192,
+        "width": 192
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -2400,
+        624
+      ],
+      "typeVersion": 1,
+      "id": "21e4355e-de82-44d7-9dd1-c57e9c059e0f",
+      "name": "Sticky Note9"
+    },
+    {
+      "parameters": {
+        "content": "### Merge labels\nCombine labels retrieved from Gmail account and assigned by AI together.",
+        "height": 619,
+        "width": 242
+      },
+      "id": "1b5edd10-897e-4bfe-8466-574121f2134f",
+      "name": "Sticky Note5",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -992,
+        624
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## GĐ 1\nTH1: 1 email / thread\" OK\nth2: Multi-email / thead : processing test\n",
+        "height": 112,
+        "width": 3782
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -4000,
+        -48
+      ],
+      "typeVersion": 1,
+      "id": "d76877cc-0b1a-469e-91cc-2ad21c638a0a",
+      "name": "Sticky Note14"
+    },
+    {
+      "parameters": {
+        "content": "### Add labeld AI_PROCESSING\n⚠️ Add label to mark AI is processing",
+        "height": 237,
+        "width": 238
+      },
+      "id": "a6a631c7-5a84-4c7c-b18b-01b332daeec7",
+      "name": "Sticky Note15",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -2944,
+        96
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "operation": "addLabels",
+        "messageId": "={{ $('Gmail trigger').item.json.id }}",
+        "labelIds": [
+          "Label_8992500823612717562"
+        ]
+      },
+      "id": "9e44d697-783b-4659-b30d-44fe7155692f",
+      "name": "Add labels for AI_PROCESSING",
+      "type": "n8n-nodes-base.gmail",
+      "position": [
+        -2544,
+        288
+      ],
+      "typeVersion": 2.1,
+      "webhookId": "18574739-07ad-4d44-a877-3dd01b77067f",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "MKNt51yMsiVMWsZk",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "thread",
+        "operation": "get",
+        "threadId": "={{ $json.threadId }}",
+        "options": {
+          "returnOnlyMessages": true
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -3200,
+        704
+      ],
+      "id": "c5e764cc-2550-4238-b8b8-72e092af44a3",
+      "name": "Get a thread",
+      "webhookId": "6c9a23fb-8521-49d9-9dce-03c12b32689d",
+      "alwaysOutputData": true,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "MKNt51yMsiVMWsZk",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "gpt-5.4-mini",
+        "options": {
+          "frequencyPenalty": 0,
+          "responseFormat": "json_object"
+        }
+      },
+      "id": "3dd09dc9-ce35-47e2-a2d8-425c7f949143",
+      "name": "OpenAI Chat1",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "position": [
+        -2304,
+        1392
+      ],
+      "typeVersion": 1,
+      "alwaysOutputData": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "5XZWXNch1DTk8ZxA",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "35315655-e718-4701-a64c-227325c3f4d2",
+              "leftValue": "={{ $('Get a thread').all().length <=1 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -3040,
+        704
+      ],
+      "id": "470efa4c-471f-4f26-a14c-97354b074fdf",
+      "name": "Check length message in thread <=1"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -1632,
+        896
+      ],
+      "id": "67330d3a-f896-4b6a-be6d-6ae3d6afce04",
+      "name": "No Operation, do nothing2"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "d6692367-928c-4127-a0a8-28a785805baa",
+              "leftValue": "={{ ['Escalated to Bot','Escalated to CS'].includes($json.label) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -1808,
+        832
+      ],
+      "id": "23aee4e8-e1a8-4b2d-a750-4b0e2d21d8d7",
+      "name": "If validate lable"
+    },
+    {
+      "parameters": {
+        "content": "## Change lable id\n** Change lable id when change credential\n",
+        "height": 224
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -2640,
+        208
+      ],
+      "typeVersion": 1,
+      "id": "121f40da-3242-4e9f-87ab-d2cad9517124",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ",
+          "mode": "list",
+          "cachedResultName": "Workflow-n8n-data",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Logs in runtime",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "is_customer": "={{ $json.is_customer }}",
+            "sentiment": "={{ $json.sentiment }}",
+            "customer_intent": "={{ $json.customer_intent }}",
+            "confidence_score": "={{ $json.confidence_score }}",
+            "order_number": "={{ $json.order_number }}",
+            "customer_name": "={{ $('Assign labels for message').item.json.customer_name }}",
+            "request_details": "={{ $json.request_details }}",
+            "Time": "={{ DateTime.local() }}",
+            "Subject": "={{ $('Get message content').item.json.Subject }}",
+            "Origin_Content": "={{ $('Gmail trigger').item.json.text || $('Get message content').item.json.snippet}}",
+            "thread_Id": "={{ $('Get message content').item.json.threadId }}",
+            "id": "={{ $('Get message content').item.json.id }}",
+            "label": "={{ $json.label }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "label",
+              "displayName": "label",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "is_customer",
+              "displayName": "is_customer",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "sentiment",
+              "displayName": "sentiment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "customer_intent",
+              "displayName": "customer_intent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "confidence_score",
+              "displayName": "confidence_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "order_number",
+              "displayName": "order_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "customer_name",
+              "displayName": "customer_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "request_details",
+              "displayName": "request_details",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "thread_Id",
+              "displayName": "thread_Id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Subject",
+              "displayName": "Subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Origin_Content",
+              "displayName": "Origin_Content",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Time",
+              "displayName": "Time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED"
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -1808,
+        640
+      ],
+      "id": "1f1f495e-4590-44f1-8b70-771e3e9df4c8",
+      "name": "Append row in \"Log in run time\"",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "eB4asdCOgDeD0oaI",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ",
+          "mode": "list",
+          "cachedResultName": "Workflow-n8n-data",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 881630755,
+          "mode": "list",
+          "cachedResultName": "Classifical Result",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ/edit#gid=881630755"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Time": "={{ DateTime.now() }}",
+            "Subject": "={{ $('Gmail trigger').item.json.Subject  }}",
+            "Origin_Content": "={{ $('Gmail trigger').item.json.snippet }}",
+            "threadId": "={{ $json.threadId }}",
+            "id": "={{  $('Gmail trigger').item.json.id|| $('Gmail trigger').item.json.id || null }}",
+            "labels": "={{ $('Set Data').first().json.label }}",
+            "is_customer": "={{ $json.is_customer }}",
+            "sentiment": "={{ $json.sentiment }}",
+            "customer_intent": "={{ $json.customer_intent }}",
+            "confidence_score": "={{ $json.confidence_score }}",
+            "order_number": "={{ $json.order_number }}",
+            "customer_name": "={{ $json.customer_name }}",
+            "request_details": "={{ $json.request_details }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "labels",
+              "displayName": "labels",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "is_customer",
+              "displayName": "is_customer",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "sentiment",
+              "displayName": "sentiment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "customer_intent",
+              "displayName": "customer_intent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "confidence_score",
+              "displayName": "confidence_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "order_number",
+              "displayName": "order_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "customer_name",
+              "displayName": "customer_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "request_details",
+              "displayName": "request_details",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "threadId",
+              "displayName": "threadId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Subject",
+              "displayName": "Subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Origin_Content",
+              "displayName": "Origin_Content",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Time",
+              "displayName": "Time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED"
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        160,
+        1232
+      ],
+      "id": "7b6257bf-4485-499d-bc2c-b0743ee6fb1a",
+      "name": "Append row in \"Result\"",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "eB4asdCOgDeD0oaI",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "label",
+        "returnAll": true
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        176,
+        1424
+      ],
+      "id": "fe90e35a-5485-4233-9f2a-64dcd121e2a6",
+      "name": "Get many labels",
+      "webhookId": "a838d834-b0d6-4626-afac-d4e94175de80",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "MKNt51yMsiVMWsZk",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $('Get a thread').all();\nconst messages = items.map((item) => item?.json || []);\nconst result = messages.map((message) => ({\n  id: message.id,\n  threadId: message.threadId,\n  subject: message.Subject,\n  content: message.snippet,\n}));\nconsole.log(messages)\nreturn result;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2672,
+        1232
+      ],
+      "id": "0df65ce1-a530-43e4-962e-d6690e3f7787",
+      "name": "Handle get list all email infor from list",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "bd18a205-9232-4c8c-bd8c-2969b439f771",
+              "leftValue": "={{ $json.order_number }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        288,
+        1040
+      ],
+      "id": "2d87b098-eb2e-451e-a905-7d3dddd69f91",
+      "name": "Check Order ID condition",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "operation": "removeLabels",
+        "messageId": "={{ $('Gmail trigger').item.json.id }}",
+        "labelIds": [
+          "Label_8992500823612717562"
+        ]
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -352,
+        1200
+      ],
+      "id": "dbf49aca-3095-413d-8f1e-197578d71d7a",
+      "name": " Remove labeld AI_PROCESSING",
+      "webhookId": "ab3ed8bc-a6bf-45a0-a109-03d4598ed92a",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "MKNt51yMsiVMWsZk",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "0e282f31-cd88-4931-8185-e3a05baa0b86",
+              "leftValue": "={{ $json.confidence_score }}",
+              "rightValue": "=0.8",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        128,
+        1056
+      ],
+      "id": "d5a48cc3-5c08-4db6-a66b-0dbf88802753",
+      "name": "Condition before pass to Bot reply",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "content": "## Condition check if foward to bot\n**\nconfidence score >= 75%\norder_id started by \"BCMC\"\n** \n",
+        "height": 384,
+        "width": 304
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        96,
+        880
+      ],
+      "typeVersion": 1,
+      "id": "7b64385b-da79-4e5d-a259-34c8ee9d096c",
+      "name": "Sticky Note10"
+    },
+    {
+      "parameters": {
+        "content": "## Handle reply by Bot\n",
+        "height": 304,
+        "width": 704
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        448,
+        960
+      ],
+      "typeVersion": 1,
+      "id": "1e530446-f173-4f8b-ac28-c713de842af7",
+      "name": "Sticky Note11"
+    },
+    {
+      "parameters": {
+        "jsCode": "const list = $input.all().map((item,index) => {\n\n    return `\n      ${index % 2==0 ? \"Customer:\" : \"CS\"} :\n      ${item.json.content}\n    `\n})\nreturn [{contents:JSON.stringify(`${list}`)}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2480,
+        1232
+      ],
+      "id": "0374d870-7dcd-4274-a41d-251f032b10bb",
+      "name": "wrap-content-list-email"
+    },
+    {
+      "parameters": {
+        "text": "=### EMAIL THREAD:\n{{ $json.contents }}",
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"$schema\": \"http://json-schema.org/draft-07/schema#\",\n  \"type\": \"object\",\n  \"required\": [\n    \"completed\",\n    \"summary\",\n    \"label\",\n    \"intent\",\n    \"order_id\",\n    \"tracking_number\",\n    \"customer_tone\",\n    \"is_customer\",\n    \"customer_intent\",\n    \"confidence_score\",\n    \"sentiment\",\n    \"order_number\",\n    \"customer_name\",\n    \"request_details\",\n    \"urgency\",\n    \"entities\"\n  ],\n  \"properties\": {\n    \"completed\": {\n      \"type\": \"boolean\",\n      \"description\": \"Whether the issue is resolved or the conversation is complete\"\n    },\n    \"summary\": {\n      \"type\": \"string\",\n      \"minLength\": 5\n    },\n    \"label\": {\n      \"type\": \"string\",\n      \"enum\": [\"Escalated to CS\", \"Escalated to Bot\", \"Notification\"]\n    },\n    \"intent\": {\n      \"type\": \"string\"\n    },\n    \"customer_tone\": {\n      \"type\": \"string\",\n      \"enum\": [\"polite\", \"neutral\", \"angry\", \"frustrated\", \"urgent\"]\n    },\n    \"is_customer\": {\n      \"type\": \"boolean\"\n    },\n    \"customer_intent\": {\n      \"type\": \"string\"\n    },\n    \"confidence_score\": {\n      \"type\": \"number\",\n      \"minimum\": 0,\n      \"maximum\": 1\n    },\n    \"sentiment\": {\n      \"type\": \"string\",\n      \"enum\": [\"Positive\", \"Neutral\", \"Negative\"]\n    },\n    \"order_number\": {\n      \"type\": [\"string\", \"null\"],\n      \"pattern\": \"^#BCMC[0-9]{6}$\"\n    },\n    \"customer_name\": {\n      \"type\": [\"string\", \"null\"]\n    },\n    \"request_details\": {\n      \"type\": \"string\"\n    },\n    \"urgency\": {\n      \"type\": \"string\",\n      \"enum\": [\"low\", \"medium\", \"high\"]\n    },\n    \"entities\": {\n      \"type\": \"object\",\n      \"required\": [\"product\", \"issue\", \"dates\", \"location\"],\n      \"properties\": {\n        \"product\": {\n          \"type\": [\"string\", \"null\"]\n        },\n        \"issue\": {\n          \"type\": [\"string\", \"null\"]\n        },\n        \"dates\": {\n          \"type\": [\"string\", \"null\"]\n        },\n        \"location\": {\n          \"type\": [\"string\", \"null\"]\n        }\n      },\n      \"additionalProperties\": false\n    }\n  },\n  \"additionalProperties\": false\n}",
+        "options": {
+          "systemPromptTemplate": "=You are an AI assistant specialized in analyzing customer email conversations.\n\nYour task is to:\n1. Summarize the entire conversation clearly and concisely.\n2. Classify the email.\n3. Extract all important structured information.\n4. Detect customer intent, tone, sentiment, and urgency.\n\n---\n\n### INPUT:\nYou will receive a full email thread (may contain multiple replies).\n\n---\n\n### OUTPUT FORMAT:\nReturn ONLY a valid JSON object.DO NOT return an array. Do not include explanations\nSchema:\n{\n  \"completed\": boolean,\n  \"summary\": string,\n  \"label\": string,\n  \"intent\": string,\n  \"order_id\": string | null,\n  \"customer_tone\": string,\n  \"is_customer\": boolean,\n  \"customer_intent\": \"Order Status Inquiry\" | \" Shipping Issue\" | \" Complaint\" | \"Refund Request\" | \"Product Inquiry\" | \"Change Request\" | \"Change Address shipping.\" | ,\n  \"confidence_score\": number (0 → 1),\n  \"sentiment\": \"positive | neutral | negative\",\n  \"order_number\": string | null,\n  \"customer_name\": string | null,\n  \"request_details\": string,\n  \"urgency\": \"low | medium | high\",\n  \"entities\": {\n    \"product\": string | null,\n    \"issue\": string | null,\n    \"dates\": string | null,\n    \"location\": string | null\n  }\n}\n\n---\n\n### INSTRUCTIONS:\n\n#### 1. Summary\n- Summarize the full conversation in 1–3 sentences.\n- Focus on the main issue and current status.\n\n#### 2. Classification (label)\nChoose ONE:\n- \"Escalated to CS\" → requires human support (complaint, refund, issue, warning for cancelation in the future from customer, change adddress shipping )\n- \"Escalated to Bot\" → can be auto-replied (tracking, info request, ask about product items, get detail about some product) and confirm order is delivered.\n- \"Notification\" → non-customer-request emails (ads, system alerts, confirmations without questions)\n\n#### 3. Intent\nShort phrase describing the main purpose.\nINTENT (MUST match EXACT enum string, including spaces):\nChoose ONE of the following EXACT values:\n- \"Order Status Inquiry\"\n- \"Shipping Issue\"\n- \"Complaint\"\n- \"Refund Request\"\n- \"Product Inquiry\"\n- \"Change Request\"\n- \"Change Address shipping\"\n- \"Incorrect Information order\"\n#### 4. Extraction rules\n- order_number format: #BCMCXXXXXX\n- tracking_number: extract if exists, else null\n- customer_name: extract from signature or email\n\n#### 5. Tone & Sentiment\n- customer_tone: polite / neutral / angry / frustrated / urgent\n- sentiment:\n  - positive\n  - neutral\n  - negative\n\n#### 6. Urgency detection\n- high → angry, threatening, refund demand, delay complaint\n- medium → asking for update\n- low → normal inquiry\n\n#### 7. completed field\n- true → issue resolved or no further action needed\n- false → still waiting for response / unresolved\n\n#### 8. confidence_score\n- Between 0 and 1\n- Based on clarity of extracted data\n\n#### 9. entities extraction\n- product → product name if mentioned\n- issue → main problem\n- dates → delivery date, order date, etc.\n- location → shipping address, country, city\n\n---\n\n### IMPORTANT:\n- If data is missing → return null\n- Do NOT hallucinate\n- Always return valid JSON\n- Keep summary short but informative\n---"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.informationExtractor",
+      "typeVersion": 1.2,
+      "position": [
+        -2304,
+        1232
+      ],
+      "id": "cc09c2f4-1544-4c6f-b1af-7f5b1769247c",
+      "name": "Information Extractor from list email"
+    },
+    {
+      "parameters": {
+        "content": "### Assign labels\nLet the AI decide which labels suit the best content of the message.\n\n⚠️ **Remember to edit system prompt** - modify label names and instructions according to your needs.",
+        "height": 429,
+        "width": 347
+      },
+      "id": "70cf2a40-f4e2-4a02-a382-2646b55f547f",
+      "name": "Sticky Note13",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -2352,
+        1040
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ",
+          "mode": "list",
+          "cachedResultName": "Workflow-n8n-data",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1566669895,
+          "mode": "list",
+          "cachedResultName": "Data_from_called_webhook",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ/edit#gid=1566669895"
+        },
+        "options": {}
+      },
+      "id": "3e1840e2-817d-44b1-aecb-619ba9fe518c",
+      "name": "Get Latest Row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -528,
+        1072
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "eB4asdCOgDeD0oaI",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "##  Set lable in freshdesk\n",
+        "height": 192,
+        "width": 496
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -544,
+        1008
+      ],
+      "typeVersion": 1,
+      "id": "dea664ba-ef3f-4b9a-b796-d84faf18de16",
+      "name": "Sticky Note16"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://newaccount1612246773755.freshdesk.com/api/v2/tickets/{{ $json.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"tags\": [\"{{ $('Merge corresponding labels').first().json.name }}\",\"{{ $('Merge corresponding labels').first().json.name }}\"],\"priority\":3  }",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -224,
+        1072
+      ],
+      "id": "37977410-fd2d-4aaf-a223-51e27f4090e3",
+      "name": "Update tag a ticket",
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "92FmQm5lq0odOKbX",
+          "name": "Unnamed credential"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "amount": 10
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -688,
+        1072
+      ],
+      "id": "716bf7d8-b00e-44dd-9fde-86b949197f55",
+      "name": "Wait",
+      "webhookId": "406acf06-428b-4e71-862c-ed9f34b82f88"
+    },
+    {
+      "parameters": {
+        "content": " **Wait for freshdesk call webhook**\n",
+        "height": 192,
+        "width": 176
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -736,
+        1008
+      ],
+      "typeVersion": 1,
+      "id": "dc417826-52e3-4ac9-b9af-b6c3416b0ecc",
+      "name": "Sticky Note17"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "9272cb8f-43b3-4f7a-b1f6-07fdfe216401",
+              "leftValue": "={{ ['Replied by CS'].some( item =>  $json.labels.map(item => item.name).includes(item) ) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -3360,
+        608
+      ],
+      "id": "aa863d9d-4482-4bd7-b86f-f5de093d5392",
+      "name": "If label = 'Replied by CS'"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "7350a783-cdd0-4958-808e-d967843a256f",
+              "leftValue": "={{ $json.label === \"Escalated to CS\" }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -1664,
+        1232
+      ],
+      "id": "0e68eece-b225-4880-a5bf-8fcd4eb232c8",
+      "name": "Check label == \"Escalated to CS\"",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "Get information on orders from tools",
+        "options": {
+          "systemMessage": "You are an API data extraction agent.\n\nYour job is to:\n1. Call the provided API endpoint using available tools.\n2. Read and understand the API response.\n3. Extract only the relevant information based on the user request.\n4. Return a clean, structured JSON object.\n\nSTRICT RULES:\n- Always return valid JSON.\n- Do NOT include explanations, markdown, or extra text.\n- If data is missing, return null.\n- Do NOT hallucinate or invent data.\n- Only use data from the API response.\n- Get exactly the number token that was used for this prompt\n\nJSON FORMAT:\n{\n  \"success\": true,\n  \"number_token\": <number token>,\n  \"data\": {},\n  \"error\": null\n}\n\nIf an error occurs:\n{\n  \"success\": false,\n  \"number_token\": <number token>,\n  \"data\": null,\n  \"error\": \"error message\"\n}"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        496,
+        1008
+      ],
+      "id": "0d8c88e5-5cf0-4015-998f-abc9c1c37f30",
+      "name": "AI Agent",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": {
+          "frequencyPenalty": 0,
+          "responseFormat": "json_object"
+        }
+      },
+      "id": "6e75464d-a216-484d-afab-a68481c484e4",
+      "name": "OpenAI Chat2",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "position": [
+        480,
+        1184
+      ],
+      "typeVersion": 1,
+      "alwaysOutputData": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "5XZWXNch1DTk8ZxA",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://fgfoaoq4wcgctgj63sz6mkcevm0kvbtf.lambda-url.ap-southeast-1.on.aws/",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": []
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "order_number",
+              "value": "={{ $('Condition before pass to Bot reply').item.json.order_number}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        640,
+        1184
+      ],
+      "id": "e5cadbc6-1a8d-4edb-b57a-757b8c606419",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ",
+          "mode": "list",
+          "cachedResultName": "Workflow-n8n-data",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Logs in runtime",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "is_customer": "={{ $('Information Extractor from list email').item.json.output.is_customer }}",
+            "sentiment": "={{ $('Information Extractor from list email').item.json.output.sentiment }}",
+            "customer_intent": "={{ $('Information Extractor from list email').item.json.output.customer_intent }}",
+            "order_number": "={{ $('Information Extractor from list email').item.json.output.order_number }}",
+            "customer_name": "={{ $('Information Extractor from list email').item.json.output.customer_name }}",
+            "request_details": "={{ $('Information Extractor from list email').item.json.output.request_details }}",
+            "Time": "={{ DateTime.local() }}",
+            "Subject": "={{ $('Gmail trigger').item.json.Subject }}",
+            "Origin_Content": "={{ $('Gmail trigger').item.json.snippet || $('Get message content').item.json.snippet}}",
+            "thread_Id": "={{ $('Gmail trigger').item.json.threadId }}",
+            "id": "={{ $('Gmail trigger').item.json.id }}",
+            "confidence_score": "={{ $('Information Extractor from list email').item.json.output.order_number }}",
+            "label": "={{ $('Information Extractor from list email').item.json.output.label }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "label",
+              "displayName": "label",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "is_customer",
+              "displayName": "is_customer",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "sentiment",
+              "displayName": "sentiment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "customer_intent",
+              "displayName": "customer_intent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "confidence_score",
+              "displayName": "confidence_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "order_number",
+              "displayName": "order_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "customer_name",
+              "displayName": "customer_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "request_details",
+              "displayName": "request_details",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "thread_Id",
+              "displayName": "thread_Id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Subject",
+              "displayName": "Subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Origin_Content",
+              "displayName": "Origin_Content",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Time",
+              "displayName": "Time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED"
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -1792,
+        1072
+      ],
+      "id": "d9cc3762-ea2b-470e-9878-1103b84cdd1c",
+      "name": "Append row in \"Log in run time\"1",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "eB4asdCOgDeD0oaI",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "label",
+        "returnAll": true
+      },
+      "id": "99c684a2-dba9-4949-a9ca-60ffe3a09e16",
+      "name": "Get all labels1",
+      "type": "n8n-nodes-base.gmail",
+      "position": [
+        -1152,
+        1056
+      ],
+      "typeVersion": 2.1,
+      "webhookId": "d5804468-2ef9-4348-9099-29fa52b79788",
+      "alwaysOutputData": true,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "MKNt51yMsiVMWsZk",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "=label",
+        "include": "allOtherFields",
+        "options": {}
+      },
+      "id": "aef1c3d0-8042-4623-af35-0f800ac26eca",
+      "name": "Split out assigned labels1",
+      "type": "n8n-nodes-base.splitOut",
+      "position": [
+        -1152,
+        1232
+      ],
+      "typeVersion": 1,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "mergeByFields": {
+          "values": [
+            {
+              "field1": "name",
+              "field2": "label"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "50a40f2a-939f-4476-b1b8-641dc499882c",
+      "name": "Merge corresponding labels1",
+      "type": "n8n-nodes-base.merge",
+      "position": [
+        -928,
+        1024
+      ],
+      "typeVersion": 2.1,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "addLabels",
+        "messageId": "={{ $('Gmail trigger').item.json.id }}",
+        "labelIds": "={{ $json.id }}"
+      },
+      "id": "177d9739-e416-4334-8476-841e39f5de3c",
+      "name": "Add labels \"Escalated to ...\"",
+      "type": "n8n-nodes-base.gmail",
+      "position": [
+        -512,
+        1200
+      ],
+      "typeVersion": 2.1,
+      "webhookId": "18574739-07ad-4d44-a877-3dd01b77067f",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "MKNt51yMsiVMWsZk",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## GĐ 2\n",
+        "height": 96,
+        "width": 2886
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -128,
+        -48
+      ],
+      "typeVersion": 1,
+      "id": "6083471f-9a9c-4c11-8488-5b9fc8eac0bc",
+      "name": "Sticky Note18"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nvar labels = $input.all().map(item => item.json.labels.map(item=>item.name)).flat()\nconst unique = [... new Set(labels)]\nconsole.log(unique)\nreturn [\n  {\n    json: {\n      labels: unique\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3024,
+        1008
+      ],
+      "id": "5e6d67b5-2329-4a55-8fee-d1b750af2f3d",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -2656,
+        912
+      ],
+      "id": "0ced0db9-dd6e-44d0-8e47-dc3f1da63215",
+      "name": "Redirect to CS"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "7350a783-cdd0-4958-808e-d967843a256f",
+              "leftValue": "={{ \n$('Get a thread').all().map(i => ({ json: i.json }))\n}}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -3232,
+        1024
+      ],
+      "id": "8292bad9-796c-4fb3-a6b3-df5bfff2dd01",
+      "name": "If1",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "5a7ff2ec-2c5c-4341-9768-4ff66b3b9a3d",
+              "leftValue": "={{\n$json.labels.includes('Escalated to CS') \n||\n$json.labels.includes('Replied by CS') \n}}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": "={{ true }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -2848,
+        1008
+      ],
+      "id": "612edf40-dedb-40d2-b80e-87e8b99ceaf0",
+      "name": "Check label == \"Replied by CS\" && \"Escalated to CS\""
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3ec1249b-e7bc-42fa-bac8-6094cf05d92e",
+              "name": "label",
+              "value": "={{ $('Information Extractor from list email').item.json.output.label }}",
+              "type": "string"
+            },
+            {
+              "id": "3fc7e34d-f9ea-45e6-bfe1-02a849aae265",
+              "name": "summary",
+              "value": "={{ $('Information Extractor from list email').item.json.output.summary }}",
+              "type": "string"
+            },
+            {
+              "id": "453c3a9a-1a0c-4020-bd88-bb6a2245b1ed",
+              "name": "intent",
+              "value": "={{ $('Information Extractor from list email').item.json.output.intent }}",
+              "type": "string"
+            },
+            {
+              "id": "e64eed8e-9e95-490f-bc51-21574fcb9588",
+              "name": "customer_tone",
+              "value": "={{ $('Information Extractor from list email').item.json.output.customer_tone }}",
+              "type": "string"
+            },
+            {
+              "id": "bf4f49fc-afe9-4bf2-913c-d46b7ea024b6",
+              "name": "is_customer",
+              "value": "={{ $('Information Extractor from list email').item.json.output.is_customer }}",
+              "type": "boolean"
+            },
+            {
+              "id": "afb1ed3d-f3eb-4b21-91ea-377db1a7cbfd",
+              "name": "customer_intent",
+              "value": "={{ $('Information Extractor from list email').item.json.output.customer_intent }}",
+              "type": "string"
+            },
+            {
+              "id": "76b91c70-c261-41d5-95fe-78a7858cb2c7",
+              "name": "confidence_score",
+              "value": "={{ $('Information Extractor from list email').item.json.output.confidence_score }}",
+              "type": "number"
+            },
+            {
+              "id": "8c3c49be-ceb8-47ec-8e0d-02f478ef28dc",
+              "name": "sentiment",
+              "value": "={{ $('Information Extractor from list email').item.json.output.sentiment }}",
+              "type": "string"
+            },
+            {
+              "id": "893ee275-3753-41bb-8ed4-574346e28d0d",
+              "name": "order_number",
+              "value": "={{ $('Information Extractor from list email').item.json.output.order_number }}",
+              "type": "string"
+            },
+            {
+              "id": "0520bd6b-73ce-446d-933c-bfd0565319b8",
+              "name": "customer_name",
+              "value": "={{ $('Information Extractor from list email').item.json.output.customer_name }}",
+              "type": "string"
+            },
+            {
+              "id": "8e01edad-0d4c-410b-b23f-49ab361f8d38",
+              "name": "request_details",
+              "value": "={{ $('Information Extractor from list email').item.json.output.request_details }}",
+              "type": "string"
+            },
+            {
+              "id": "d54ca3c1-bc97-4a33-9145-fb8b20b708e0",
+              "name": "output.urgency",
+              "value": "={{ $('Information Extractor from list email').item.json.output.urgency }}",
+              "type": "string"
+            },
+            {
+              "id": "50abc9c2-644a-4f0d-9c22-152ca6a164c8",
+              "name": "number_token",
+              "value": "={{ $('Information Extractor from list email').item.json.output.number_token }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1360,
+        1232
+      ],
+      "id": "262878de-cb7b-4837-95e9-3a373b1f58be",
+      "name": "Edit Fields1",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "39f907e4-e2b0-4af4-ae3f-4b22ae96879f",
+              "leftValue": "={{ $('Value JSON data result').first().json.hasField('errror')}}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        976,
+        1008
+      ],
+      "id": "f7e581bc-bef2-4638-a16b-b15d470863e9",
+      "name": "Check error"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ $json.output.parseJson().data }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        800,
+        1008
+      ],
+      "id": "46b3352c-c756-4d1f-86da-7e21caa1ee21",
+      "name": "Value JSON data result"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        512,
+        1472
+      ],
+      "id": "6c3f1250-b888-4697-9dc4-9f336e635c19",
+      "name": "Send email require provide order id"
+    },
+    {
+      "parameters": {
+        "content": "## Templete Reply if not Order ID\nHi {customer_name},\n\nThanks for reaching out! Could you please provide your order ID so we can check the status and update you promptly?\n\n\nThanks & Regards,\nBest Custom Support Team.\n\nHelp center: https://help.bestcustom.co/support/home\nTrack your order: https://bestcustom.co/pages/tracking-order",
+        "height": 288,
+        "width": 544
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        688,
+        1744
+      ],
+      "typeVersion": 1,
+      "id": "518c6ae6-0be5-4579-b931-3a621d33540e",
+      "name": "Sticky Note20"
+    },
+    {
+      "parameters": {
+        "operation": "addLabels",
+        "messageId": "={{ $('Gmail trigger').item.json.id }}",
+        "labelIds": [
+          "Label_3351592853293308723"
+        ]
+      },
+      "id": "2c97f97c-c855-4249-9d44-ef63edd0f469",
+      "name": "Add labels \"Replied by Bot\"",
+      "type": "n8n-nodes-base.gmail",
+      "position": [
+        928,
+        1536
+      ],
+      "typeVersion": 2.1,
+      "webhookId": "18574739-07ad-4d44-a877-3dd01b77067f",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "MKNt51yMsiVMWsZk",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\nreturn $input.all()[$input.all().length - 1];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -368,
+        1072
+      ],
+      "id": "eeefa640-ff9b-44d6-a6c4-2c7aedeaa1cd",
+      "name": "Extract data ticket",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3c0c665c-4d7e-42e6-ab67-5ecdff681b4f",
+              "name": "id_ticket",
+              "value": "={{ $('Extract data ticket').first().json.id  }}",
+              "type": "number"
+            },
+            {
+              "id": "bbe6e78e-8215-42d8-8bb6-d9f7bff83db0",
+              "name": "is_customer",
+              "value": "={{ $('Information Extractor from list email').item.json.output.is_customer }}",
+              "type": "boolean"
+            },
+            {
+              "id": "d495d52e-4009-40ed-95ac-5d0512580467",
+              "name": "customer_intent",
+              "value": "={{ $('Information Extractor from list email').item.json.output.customer_intent }}",
+              "type": "string"
+            },
+            {
+              "id": "ed905f94-7e59-4dbb-b48d-52ed3f746fea",
+              "name": "confidence_score",
+              "value": "={{ $('Information Extractor from list email').item.json.output.confidence_score }}",
+              "type": "number"
+            },
+            {
+              "id": "a8f027dc-e3e1-4d35-a927-a66707d93a84",
+              "name": "sentiment",
+              "value": "={{ $('Information Extractor from list email').item.json.output.sentiment }}",
+              "type": "string"
+            },
+            {
+              "id": "fd3d85b1-c353-41ee-8d76-5a3ac2c85941",
+              "name": "order_number",
+              "value": "={{ $('Information Extractor from list email').item.json.output.order_number }}",
+              "type": "string"
+            },
+            {
+              "id": "9b5c06d4-8fdb-4801-ba8f-17a9a7b475c2",
+              "name": "customer_name",
+              "value": "={{ $('Information Extractor from list email').item.json.output.customer_name }}",
+              "type": "string"
+            },
+            {
+              "id": "ca8be9c7-d9c0-4bfa-be1d-aeb35257d3de",
+              "name": "label",
+              "value": "={{ $('Information Extractor from list email').item.json.output.label }}",
+              "type": "string"
+            },
+            {
+              "id": "495c63b0-f3e1-467f-9d16-8269fb59f57d",
+              "name": "threadId",
+              "value": "={{ $('Gmail trigger').item.json.threadId }}",
+              "type": "string"
+            },
+            {
+              "id": "67b86793-df7a-4cd3-afb2-1b17d0e2c71b",
+              "name": "id_email_origin",
+              "value": "={{ $('Gmail trigger').item.json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "20bdbefa-3562-43ce-820a-db7d668e335c",
+              "name": "request_details",
+              "value": "={{ $('Information Extractor from list email').item.json.output.request_details }}",
+              "type": "string"
+            },
+            {
+              "id": "5e7fc2e7-3b02-457b-8dc7-9e05955a7e50",
+              "name": "Subject",
+              "value": "={{ $('Gmail trigger').item.json.Subject }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -32,
+        1072
+      ],
+      "id": "584f7efe-e88b-4ca3-b9cf-11801bd3beff",
+      "name": "Set Data",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "36ceab0c-a525-42a7-a695-bfcba539a721",
+              "name": "customer_name",
+              "value": "={{ $json.customer_name }}",
+              "type": "string"
+            },
+            {
+              "id": "15bf2b91-27ee-4ebd-9848-ba7dcb523b58",
+              "name": "threadId",
+              "value": "={{ $json.threadId }}",
+              "type": "string"
+            },
+            {
+              "id": "5babc406-386e-4b92-9afc-447e9c71b3b7",
+              "name": "labels",
+              "value": "={{ $json.label }}",
+              "type": "string"
+            },
+            {
+              "id": "4308e504-4567-4679-9c48-05998eac698c",
+              "name": "request_details",
+              "value": "={{ $json.request_details }}",
+              "type": "string"
+            },
+            {
+              "id": "625c7400-196e-43f4-8027-d9303f668b94",
+              "name": "Subject",
+              "value": "={{ $json.Subject }}",
+              "type": "string"
+            },
+            {
+              "id": "04817f03-78ee-4b0e-b0c5-428437849e50",
+              "name": "content",
+              "value": "=Hi {{ $json.customer_name }},\n\nThanks for reaching out! Could you please provide your order ID so we can check the status and update you promptly?\n\n\nThanks & Regards,\nBest Custom Support Team.\n\nHelp center: https://help.bestcustom.co/support/home\nTrack your order: https://bestcustom.co/pages/tracking-order",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        672,
+        1472
+      ],
+      "id": "789e02b3-3fd1-46af-9668-229265f20a5f",
+      "name": "Set content ro Reply"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ",
+          "mode": "list",
+          "cachedResultName": "Workflow-n8n-data",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 785905413,
+          "mode": "list",
+          "cachedResultName": "Finished Result",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ/edit#gid=785905413"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "labels": "={{ $('Set Data').item.json.label }}",
+            "is_customer": "={{ $('Set Data').item.json.is_customer }}",
+            "sentiment": "={{ $('Set Data').item.json.sentiment }}",
+            "customer_intent": "={{ $('Set Data').item.json.customer_intent }}",
+            "confidence_score": "={{ $('Set Data').item.json.confidence_score }}",
+            "order_number": "={{ $('Set Data').item.json.order_number }}",
+            "customer_name": "={{ $('Set Data').item.json.customer_name }}",
+            "request_details": "={{ $('Set Data').item.json.request_details }}",
+            "threadId": "={{ $('Gmail trigger').item.json.threadId }}",
+            "Subject": "={{ $('Gmail trigger').item.json.Subject }}",
+            "Origin_Content": "={{ $('Gmail trigger').item.json.snippet }}",
+            "Time": "={{ DateTime.now().toLocal() }}",
+            "Bot_reply": "={{ $json.content }}",
+            "id_email": "={{ $('Gmail trigger').item.json.id }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id_email",
+              "displayName": "id_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "labels",
+              "displayName": "labels",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "is_customer",
+              "displayName": "is_customer",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "sentiment",
+              "displayName": "sentiment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "customer_intent",
+              "displayName": "customer_intent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "confidence_score",
+              "displayName": "confidence_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "order_number",
+              "displayName": "order_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "customer_name",
+              "displayName": "customer_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "request_details",
+              "displayName": "request_details",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "threadId",
+              "displayName": "threadId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Subject",
+              "displayName": "Subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Origin_Content",
+              "displayName": "Origin_Content",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Bot_reply",
+              "displayName": "Bot_reply",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Time",
+              "displayName": "Time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED"
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        928,
+        1360
+      ],
+      "id": "deecd839-6e04-4bb5-bd0e-78a376db6174",
+      "name": "Append row in \"Finished Result\"",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "eB4asdCOgDeD0oaI",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Handle reply email when having order ID\n",
+        "height": 736,
+        "width": 352
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1168,
+        528
+      ],
+      "typeVersion": 1,
+      "id": "6bd1fc99-28b2-445c-8944-f324ae9a1d47",
+      "name": "Sticky Note21"
+    },
+    {
+      "parameters": {
+        "operation": "addLabels",
+        "messageId": "={{ $('Gmail trigger').item.json.id }}",
+        "labelIds": [
+          "Label_5234641995347543628"
+        ]
+      },
+      "id": "13693cbf-d48b-415d-b81d-ffdef1caf3ef",
+      "name": "Add labels \"Replied by CS\"",
+      "type": "n8n-nodes-base.gmail",
+      "position": [
+        -1520,
+        1440
+      ],
+      "typeVersion": 2.1,
+      "webhookId": "18574739-07ad-4d44-a877-3dd01b77067f",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "MKNt51yMsiVMWsZk",
+          "name": "Gmail account"
+        }
+      },
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "fieldsToAggregate": {
+          "fieldToAggregate": [
+            {
+              "fieldToAggregate": "id",
+              "renameField": true,
+              "outputFieldName": "id"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "955dffc6-3ee1-43d8-9559-ddfd0f1654dc",
+      "name": "Aggregate label IDs1",
+      "type": "n8n-nodes-base.aggregate",
+      "position": [
+        -912,
+        768
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "### Aggregarte labels \nCreate array of label IDs and add to the desired email message in Gmail.",
+        "height": 411,
+        "width": 692
+      },
+      "id": "8c95a4c2-4f88-408b-930d-947f876b38be",
+      "name": "Sticky Note22",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -944,
+        480
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "operation": "removeLabels",
+        "messageId": "={{ $('Gmail trigger').item.json.id }}",
+        "labelIds": [
+          "Label_8992500823612717562"
+        ]
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -576,
+        768
+      ],
+      "id": "bc46d06c-207c-41e5-99bf-81fba0215196",
+      "name": " Remove labeld AI_PROCESSING1",
+      "webhookId": "ab3ed8bc-a6bf-45a0-a109-03d4598ed92a",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "MKNt51yMsiVMWsZk",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ",
+          "mode": "list",
+          "cachedResultName": "Workflow-n8n-data",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1566669895,
+          "mode": "list",
+          "cachedResultName": "Data_from_called_webhook",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ/edit#gid=1566669895"
+        },
+        "options": {}
+      },
+      "id": "ddd3ba17-6b88-4807-8deb-70f705356d19",
+      "name": "Get Latest Row1",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -736,
+        640
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "eB4asdCOgDeD0oaI",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "##  Set lable in freshdesk\n",
+        "height": 192,
+        "width": 496
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -752,
+        576
+      ],
+      "typeVersion": 1,
+      "id": "ffbe26a1-4e1f-4006-9755-f425e64565e0",
+      "name": "Sticky Note23"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://newaccount1612246773755.freshdesk.com/api/v2/tickets/{{ $json.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"tags\": [\"{{ $('Merge corresponding labels').first().json.name }}\",\"{{ $('Split out assigned labels').item.json.customer_intent }}\"],\"priority\":3  }",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -416,
+        640
+      ],
+      "id": "776b515b-b29e-43fa-a373-6ad54bd33182",
+      "name": "Update tag a ticket1",
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "92FmQm5lq0odOKbX",
+          "name": "Unnamed credential"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "amount": 10
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -912,
+        640
+      ],
+      "id": "f84c5417-9591-45eb-9a85-89a3a348a419",
+      "name": "Wait1",
+      "webhookId": "406acf06-428b-4e71-862c-ed9f34b82f88"
+    },
+    {
+      "parameters": {
+        "content": " **Wait for freshdesk call webhook**\n",
+        "height": 192,
+        "width": 176
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -928,
+        576
+      ],
+      "typeVersion": 1,
+      "id": "5989e815-2892-4506-82c9-a0388e711b07",
+      "name": "Sticky Note24"
+    },
+    {
+      "parameters": {
+        "operation": "addLabels",
+        "messageId": "={{ $('Gmail trigger').item.json.id }}",
+        "labelIds": "={{ $json.id }}"
+      },
+      "id": "82f54911-aeea-4185-a34b-e8282ca3f0d1",
+      "name": "Add labels \"Escalated to ...\"1",
+      "type": "n8n-nodes-base.gmail",
+      "position": [
+        -736,
+        768
+      ],
+      "typeVersion": 2.1,
+      "webhookId": "18574739-07ad-4d44-a877-3dd01b77067f",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "MKNt51yMsiVMWsZk",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\nreturn $input.all()[$input.all().length - 1];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -576,
+        640
+      ],
+      "id": "000e53f2-0aae-4f7e-b7a8-a28704511de3",
+      "name": "Extract data ticket1",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "content": "## Templete Email having order ID\n\nHi {customer_name},\n\nThanks for reaching out ! \nYour order {order_number} is currently in {status} and was last updated on {order_last_updated_at}. \n\nThanks & Regards,\nBest Custom Support Team.\n\nHelp center: https://help.bestcustom.co/support/home\nTrack your order: https://bestcustom.co/pages/tracking-order",
+        "height": 272,
+        "width": 704
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        368,
+        -224
+      ],
+      "typeVersion": 1,
+      "id": "4d2e5678-c80d-4f1d-ad9d-34e670db3ea1",
+      "name": "Sticky Note12"
+    },
+    {
+      "parameters": {
+        "content": "## Handle reply email when having order ID\n",
+        "height": 432,
+        "width": 640
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        800,
+        1296
+      ],
+      "typeVersion": 1,
+      "id": "c35071d2-78c3-441e-b7d6-b44456cbbd94",
+      "name": "Sticky Note25"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "707c8643-6c49-4a70-836a-5300d78679b2",
+              "name": "id",
+              "value": "={{ $('Gmail trigger').item.json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "04817f03-78ee-4b0e-b0c5-428437849e50",
+              "name": "content",
+              "value": "=Hi {{ $('Set Data').item.json.customer_name }},\n\nThanks for reaching out! \nYour order {{ $('Set Data').item.json.order_number }} is currently {{ $json.order_status.toLowerCase() }} and was last updated on last updated on {{ new Date($json.order_last_updated_at.split('T')[0]).toLocaleDateString(\"en-US\", {\n  year: \"numeric\",\n  month: \"long\",\n  day: \"numeric\"\n}) }}. \n\nThanks & Regards,\nBest Custom Support Team.\n\nHelp center: https://help.bestcustom.co/support/home\nTrack your order: https://bestcustom.co/pages/tracking-order",
+              "type": "string"
+            },
+            {
+              "id": "efb6e2ec-a6a9-46df-83b3-3fc4fa0da9a0",
+              "name": "threadId",
+              "value": "={{ $('Gmail trigger').item.json.threadId }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1216,
+        1104
+      ],
+      "id": "b1f658d3-b254-40de-a74e-11599c8d2e9e",
+      "name": "Set content ro Reply1"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ",
+          "mode": "list",
+          "cachedResultName": "Workflow-n8n-data",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 785905413,
+          "mode": "list",
+          "cachedResultName": "Finished Result",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ/edit#gid=785905413"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "labels": "={{ $('Information Extractor from list email').item.json.output.label }}",
+            "is_customer": "={{ $('Information Extractor from list email').item.json.output.is_customer }}",
+            "sentiment": "={{ $('Information Extractor from list email').item.json.output.sentiment }}",
+            "customer_intent": "={{ $('Information Extractor from list email').item.json.output.customer_intent }}",
+            "confidence_score": "={{ $('Information Extractor from list email').item.json.output.confidence_score }}",
+            "order_number": "={{ $('Information Extractor from list email').item.json.output.order_number }}",
+            "customer_name": "={{ $('Information Extractor from list email').item.json.output.customer_name }}",
+            "request_details": "={{ $('Information Extractor from list email').item.json.output.request_details }}",
+            "threadId": "={{ $('Gmail trigger').item.json.threadId }}",
+            "Subject": "={{ $('Gmail trigger').item.json.Subject }}",
+            "Origin_Content": "={{ $('Gmail trigger').item.json.snippet }}",
+            "Time": "={{ DateTime.now().toLocal() }}",
+            "Bot_reply": "={{ $json.content }}",
+            "id_email": "={{ $('Gmail trigger').item.json.id }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id_email",
+              "displayName": "id_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "labels",
+              "displayName": "labels",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "is_customer",
+              "displayName": "is_customer",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "sentiment",
+              "displayName": "sentiment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "customer_intent",
+              "displayName": "customer_intent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "confidence_score",
+              "displayName": "confidence_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "order_number",
+              "displayName": "order_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "customer_name",
+              "displayName": "customer_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "request_details",
+              "displayName": "request_details",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "threadId",
+              "displayName": "threadId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Subject",
+              "displayName": "Subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Origin_Content",
+              "displayName": "Origin_Content",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Bot_reply",
+              "displayName": "Bot_reply",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Time",
+              "displayName": "Time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED"
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1408,
+        992
+      ],
+      "id": "e0ff74d5-ea81-4ded-84ff-b43d8f17c746",
+      "name": "Append row in \"Finished Result\"1",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "eB4asdCOgDeD0oaI",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "reply",
+        "messageId": "={{ $json.id }}",
+        "emailType": "text",
+        "message": "={{ $json.content }}",
+        "options": {
+          "replyToSenderOnly": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1408,
+        1152
+      ],
+      "id": "71ef53ac-df3d-4599-86cb-1bb31e1ac34c",
+      "name": "Reply to a message",
+      "webhookId": "c72014a6-62f5-4b2e-bc1e-76651f2f168f",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "MKNt51yMsiVMWsZk",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Handle reply by Bot\n",
+        "height": 304,
+        "width": 704
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        224,
+        544
+      ],
+      "typeVersion": 1,
+      "id": "7db8e119-e21e-40b8-82c2-21b05d0ba0ea",
+      "name": "Sticky Note26"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "Get information on orders from tools",
+        "options": {
+          "systemMessage": "You are an API data extraction agent.\n\nYour job is to:\n1. Call the provided API endpoint using available tools.\n2. Read and understand the API response.\n3. Extract only the relevant information based on the user request.\n4. Return a clean, structured JSON object.\n\nSTRICT RULES:\n- Always return valid JSON.\n- Do NOT include explanations, markdown, or extra text.\n- If data is missing, return null.\n- Do NOT hallucinate or invent data.\n- Only use data from the API response.\n- Get exactly the number token (number_token) that was used for this prompt\n\nJSON FORMAT:\n{\n  \"success\": true,\n   \"number_token\": <number token>,\n  \"data\": {},\n  \"error\": null\n}\n\nIf an error occurs:\n{\n  \"success\": false,\n  \"number_token\": <number token>,\n  \"data\": null,\n  \"error\": \"error message\""
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        272,
+        592
+      ],
+      "id": "90ffc11d-4710-43a2-a7c5-ad78ae33db1c",
+      "name": "AI Agent1",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": {
+          "frequencyPenalty": 0,
+          "responseFormat": "json_object"
+        }
+      },
+      "id": "dd24392d-2be8-488e-9725-3ddd6a4e3fd6",
+      "name": "OpenAI Chat3",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "position": [
+        256,
+        768
+      ],
+      "typeVersion": 1,
+      "alwaysOutputData": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "5XZWXNch1DTk8ZxA",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://fgfoaoq4wcgctgj63sz6mkcevm0kvbtf.lambda-url.ap-southeast-1.on.aws/",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": []
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n    \"order_number\": \"{{ $('Set Data Result 1').first().json.order_number }}\"\n} ",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        416,
+        768
+      ],
+      "id": "5723ea00-f974-4489-b8d6-48d1fd4e8605",
+      "name": "HTTP Request1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "39f907e4-e2b0-4af4-ae3f-4b22ae96879f",
+              "leftValue": "={{ $('Value JSON data result1').first().json.error==null}}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "6c0aaad0-6dc3-4ff1-984e-acf4226343ea",
+              "leftValue": "={{ $('Value JSON data result1').first().json.success}}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        768,
+        592
+      ],
+      "id": "8aafa62f-e0d4-4406-931f-fa0cce7a3dde",
+      "name": "Check error1"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ $json.output.parseJson() }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        592,
+        592
+      ],
+      "id": "1e7ac5a5-7bf7-4f40-b296-c534710fd6a7",
+      "name": "Value JSON data result1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "14cfed3f-d14e-410f-bdcc-fd666e36cefd",
+              "leftValue": "={{ $json.label==='Escalated to CS'}}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -80,
+        592
+      ],
+      "id": "679f5355-d874-420d-bb2e-edde7b52321e",
+      "name": "If Escalated to CS"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ",
+          "mode": "list",
+          "cachedResultName": "Workflow-n8n-data",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 881630755,
+          "mode": "list",
+          "cachedResultName": "Classifical Result",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ/edit#gid=881630755"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Time": "={{ DateTime.now() }}",
+            "Subject": "={{ $('Gmail trigger').item.json.Subject  }}",
+            "Origin_Content": "={{ $('Get message content').item.json.snippet || null  }}",
+            "threadId": "={{ $json.threadId }}",
+            "id": "={{  $('Gmail trigger').item.json.id|| $('Gmail trigger').item.json.id || null }}",
+            "labels": "={{ $json.label }}",
+            "is_customer": "={{ $json.is_customer }}",
+            "sentiment": "={{ $json.sentiment }}",
+            "customer_intent": "={{ $json.customer_intent }}",
+            "confidence_score": "={{ $json.confidence_score }}",
+            "order_number": "={{ $json.order_number }}",
+            "customer_name": "={{ $json.customer_name }}",
+            "request_details": "={{ $json.request_details }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "labels",
+              "displayName": "labels",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "is_customer",
+              "displayName": "is_customer",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "sentiment",
+              "displayName": "sentiment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "customer_intent",
+              "displayName": "customer_intent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "confidence_score",
+              "displayName": "confidence_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "order_number",
+              "displayName": "order_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "customer_name",
+              "displayName": "customer_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "request_details",
+              "displayName": "request_details",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "threadId",
+              "displayName": "threadId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Subject",
+              "displayName": "Subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Origin_Content",
+              "displayName": "Origin_Content",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Time",
+              "displayName": "Time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED"
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -80,
+        736
+      ],
+      "id": "65e00757-7139-4ea6-9d7c-2c0f9c15775d",
+      "name": "Append row in \"Result\"1",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "eB4asdCOgDeD0oaI",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3c0c665c-4d7e-42e6-ab67-5ecdff681b4f",
+              "name": "id_ticket",
+              "value": "={{ $('Extract data ticket1').first().json.id }}",
+              "type": "number"
+            },
+            {
+              "id": "bbe6e78e-8215-42d8-8bb6-d9f7bff83db0",
+              "name": "is_customer",
+              "value": "={{ $('Assign labels for message').item.json.is_customer }}",
+              "type": "boolean"
+            },
+            {
+              "id": "d495d52e-4009-40ed-95ac-5d0512580467",
+              "name": "customer_intent",
+              "value": "={{ $('Assign labels for message').item.json.customer_intent  }}",
+              "type": "string"
+            },
+            {
+              "id": "ed905f94-7e59-4dbb-b48d-52ed3f746fea",
+              "name": "confidence_score",
+              "value": "={{ $('Assign labels for message').item.json.confidence_score }}",
+              "type": "number"
+            },
+            {
+              "id": "a8f027dc-e3e1-4d35-a927-a66707d93a84",
+              "name": "sentiment",
+              "value": "={{ $('Assign labels for message').item.json.sentiment }}",
+              "type": "string"
+            },
+            {
+              "id": "fd3d85b1-c353-41ee-8d76-5a3ac2c85941",
+              "name": "order_number",
+              "value": "={{ $('Assign labels for message').item.json.order_number }}",
+              "type": "string"
+            },
+            {
+              "id": "9b5c06d4-8fdb-4801-ba8f-17a9a7b475c2",
+              "name": "customer_name",
+              "value": "={{ $('Assign labels for message').item.json.customer_name }}",
+              "type": "string"
+            },
+            {
+              "id": "ca8be9c7-d9c0-4bfa-be1d-aeb35257d3de",
+              "name": "label",
+              "value": "={{ $('Assign labels for message').item.json.label }}",
+              "type": "string"
+            },
+            {
+              "id": "495c63b0-f3e1-467f-9d16-8269fb59f57d",
+              "name": "threadId",
+              "value": "={{ $('Gmail trigger').item.json.threadId }}",
+              "type": "string"
+            },
+            {
+              "id": "67b86793-df7a-4cd3-afb2-1b17d0e2c71b",
+              "name": "id_email_origin",
+              "value": "={{ $('Gmail trigger').item.json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "20bdbefa-3562-43ce-820a-db7d668e335c",
+              "name": "request_details",
+              "value": "={{ $('Assign labels for message').item.json.request_details }}",
+              "type": "string"
+            },
+            {
+              "id": "206907cc-ea84-4758-80bb-2bfd103e2dde",
+              "name": "Subject",
+              "value": "={{ $('Gmail trigger').item.json.Subject }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -240,
+        704
+      ],
+      "id": "ff48e090-89db-403c-a25f-47c09cbe633c",
+      "name": "Set Data Result 1",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "707c8643-6c49-4a70-836a-5300d78679b2",
+              "name": "id",
+              "value": "={{ $('Gmail trigger').first().json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "04817f03-78ee-4b0e-b0c5-428437849e50",
+              "name": "content",
+              "value": "=Hi {{ $('Set Data Result 1').first().json.customer_name }},\n\nThanks for reaching out! \nYour order {{ $('Set Data Result 1').first().json.order_number }} is currently {{ $json.data.orders[0].order_status.toLowerCase() }} and was last updated on {{ new Date($json.data.orders[0].order_last_updated_at).toLocaleDateString(\"en-US\", {\n  year: \"numeric\",\n  month: \"long\",\n  day: \"numeric\"\n}) }}. \n\nThanks & Regards,\nBest Custom Support Team.\n\nHelp center: https://help.bestcustom.co/support/home\nTrack your order: https://bestcustom.co/pages/tracking-order",
+              "type": "string"
+            },
+            {
+              "id": "efb6e2ec-a6a9-46df-83b3-3fc4fa0da9a0",
+              "name": "threadId",
+              "value": "={{ $('Set Data Result 1').first().json.threadId }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        992,
+        688
+      ],
+      "id": "41066e0e-9cb7-4dd9-b71f-a6d041861156",
+      "name": "Set content ro Reply2"
+    },
+    {
+      "parameters": {
+        "operation": "reply",
+        "messageId": "={{ $json.id }}",
+        "emailType": "text",
+        "message": "={{ $json.content }}",
+        "options": {
+          "replyToSenderOnly": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1200,
+        720
+      ],
+      "id": "6e420404-b99f-442f-96a2-baaec21d6947",
+      "name": "Reply to a message2",
+      "webhookId": "c72014a6-62f5-4b2e-bc1e-76651f2f168f",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "MKNt51yMsiVMWsZk",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ",
+          "mode": "list",
+          "cachedResultName": "Workflow-n8n-data",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 785905413,
+          "mode": "list",
+          "cachedResultName": "Finished Result",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ/edit#gid=785905413"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "labels": "={{ $('Set Data Result 1').first().json.label }}",
+            "is_customer": "={{ $('Set Data Result 1').first().json.is_customer }}",
+            "sentiment": "={{ $('Set Data Result 1').first().json.sentiment }}",
+            "customer_intent": "={{ $('Set Data Result 1').first().json.customer_intent }}",
+            "confidence_score": "={{ $('Set Data Result 1').first().json.confidence_score }}",
+            "order_number": "={{ $('Set Data Result 1').first().json.order_number }}",
+            "request_details": "={{ $('Set Data Result 1').first().json.request_details }}",
+            "threadId": "={{ $('Set Data Result 1').first().json.threadId }}",
+            "Subject": "={{ $('Set Data Result 1').first().json.Subject }}",
+            "Origin_Content": "={{ $('Gmail trigger').first().json.snippet }}",
+            "Time": "={{ DateTime.now().toLocal() }}",
+            "Bot_reply": "={{ $json.content }}",
+            "id_email": "={{ $('Gmail trigger').first().json.id }}",
+            "customer_name": "={{ $('Set Data Result 1').first().json.customer_name }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id_email",
+              "displayName": "id_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "labels",
+              "displayName": "labels",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "is_customer",
+              "displayName": "is_customer",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "sentiment",
+              "displayName": "sentiment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "customer_intent",
+              "displayName": "customer_intent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "confidence_score",
+              "displayName": "confidence_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "order_number",
+              "displayName": "order_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "customer_name",
+              "displayName": "customer_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "request_details",
+              "displayName": "request_details",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "threadId",
+              "displayName": "threadId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Subject",
+              "displayName": "Subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Origin_Content",
+              "displayName": "Origin_Content",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Bot_reply",
+              "displayName": "Bot_reply",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Time",
+              "displayName": "Time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED"
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1200,
+        576
+      ],
+      "id": "0406a73d-2642-4e2e-8304-259b6f50183d",
+      "name": "Append row in \"Finished Result\"2",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "eB4asdCOgDeD0oaI",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://newaccount1612246773755.freshdesk.com/api/v2/tickets/{{ $('Set Data Result 1').first().json.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"tags\": [\"{{ $('Set Data Result 1').first().json.label }}\",\"{{ $('Set Data Result 1').first().json.customer_intent }}\",\"Replied by Bot\"],\"priority\":3, \"status\":6 }",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1200,
+        848
+      ],
+      "id": "cdb1a0e0-daff-45e2-9c97-2ed21bad2d17",
+      "name": "Handle update tag in ticket",
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "92FmQm5lq0odOKbX",
+          "name": "Unnamed credential"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "314dcba0-ef11-4a60-a3ad-ac415cd7d939",
+              "leftValue": "={{ $json.order_number }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        96,
+        608
+      ],
+      "id": "69f9f4f4-1b70-44c2-81bd-c413e6c13ffd",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "707c8643-6c49-4a70-836a-5300d78679b2",
+              "name": "id",
+              "value": "={{ $('Gmail trigger').first().json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "04817f03-78ee-4b0e-b0c5-428437849e50",
+              "name": "content",
+              "value": "=Hi {{ $json.customer_name }},\n\nThanks for reaching out! Could you please provide your order ID so we can check the status and update you promptly?\n\n\nThanks & Regards,\nBest Custom Support Team.\n\nHelp center: https://help.bestcustom.co/support/home\nTrack your order: https://bestcustom.co/pages/tracking-order",
+              "type": "string"
+            },
+            {
+              "id": "efb6e2ec-a6a9-46df-83b3-3fc4fa0da9a0",
+              "name": "threadId",
+              "value": "={{ $('Set Data Result 1').first().json.threadId }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        320,
+        400
+      ],
+      "id": "7b67cc5f-02f4-4f4f-9e8a-5626ae6f1b94",
+      "name": "Set content ro Reply if not order number"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ",
+          "mode": "list",
+          "cachedResultName": "Workflow-n8n-data",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 785905413,
+          "mode": "list",
+          "cachedResultName": "Finished Result",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ/edit#gid=785905413"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "labels": "={{ $('Set Data Result 1').first().json.label }}",
+            "is_customer": "={{ $('Set Data Result 1').first().json.is_customer }}",
+            "sentiment": "={{ $('Set Data Result 1').first().json.sentiment }}",
+            "customer_intent": "={{ $('Set Data Result 1').first().json.customer_intent }}",
+            "confidence_score": "={{ $('Set Data Result 1').first().json.confidence_score }}",
+            "order_number": "={{ $('Set Data Result 1').first().json.order_number }}",
+            "request_details": "={{ $('Set Data Result 1').first().json.request_details }}",
+            "threadId": "={{ $('Set Data Result 1').first().json.threadId }}",
+            "Subject": "={{ $('Set Data Result 1').first().json.Subject }}",
+            "Origin_Content": "={{ $('Gmail trigger').first().json.snippet }}",
+            "Time": "={{ DateTime.now().toLocal() }}",
+            "Bot_reply": "={{ $json.content }}",
+            "id_email": "={{ $('Gmail trigger').first().json.id }}",
+            "customer_name": "={{ $('Set Data Result 1').first().json.customer_name }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id_email",
+              "displayName": "id_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "labels",
+              "displayName": "labels",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "is_customer",
+              "displayName": "is_customer",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "sentiment",
+              "displayName": "sentiment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "customer_intent",
+              "displayName": "customer_intent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "confidence_score",
+              "displayName": "confidence_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "order_number",
+              "displayName": "order_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "customer_name",
+              "displayName": "customer_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "request_details",
+              "displayName": "request_details",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "threadId",
+              "displayName": "threadId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Subject",
+              "displayName": "Subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Origin_Content",
+              "displayName": "Origin_Content",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Bot_reply",
+              "displayName": "Bot_reply",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Time",
+              "displayName": "Time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED"
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        512,
+        400
+      ],
+      "id": "456fb6cc-2f99-4341-a77b-a210b1161a35",
+      "name": "Append row in \"Finished Result\"3",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "eB4asdCOgDeD0oaI",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "reply",
+        "messageId": "={{ $json.id }}",
+        "emailType": "text",
+        "message": "={{ $json.content }}",
+        "options": {
+          "replyToSenderOnly": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        512,
+        272
+      ],
+      "id": "7e9bdceb-6372-4ee2-b531-7c1b76e09dee",
+      "name": "Reply if not have order number",
+      "webhookId": "c72014a6-62f5-4b2e-bc1e-76651f2f168f",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "MKNt51yMsiVMWsZk",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ",
+          "mode": "list",
+          "cachedResultName": "Workflow-n8n-data",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1566669895,
+          "mode": "list",
+          "cachedResultName": "Data_from_called_webhook",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ/edit#gid=1566669895"
+        },
+        "options": {}
+      },
+      "id": "e6b0931b-268d-456d-a188-1d6a790a732b",
+      "name": "Get Latest Row2",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -1184,
+        1456
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "eB4asdCOgDeD0oaI",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://newaccount1612246773755.freshdesk.com/api/v2/tickets/{{ $json.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"tags\": [\"{{ $('Information Extractor from list email').item.json.output.label }}\",\"{{ $('Information Extractor from list email').item.json.output.customer_intent }}\"],\"priority\":3,\"status\": 3  }",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -864,
+        1456
+      ],
+      "id": "c4bb13c7-a5cb-4f68-9b7f-5f4e9bc938bb",
+      "name": "Update tag a ticket2",
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "92FmQm5lq0odOKbX",
+          "name": "Unnamed credential"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "amount": 8
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -1360,
+        1456
+      ],
+      "id": "3b30a750-2cbc-4348-a700-0e54ff7a6df1",
+      "name": "Wait2",
+      "webhookId": "406acf06-428b-4e71-862c-ed9f34b82f88"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\nreturn $input.all()[$input.all().length - 1];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1024,
+        1456
+      ],
+      "id": "4fedb6a5-9ce4-4929-8aa3-3e027eaaa66a",
+      "name": "Extract data ticket2",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "content": "## Assign tag\nEscalated to CS - Refund Request\n",
+        "height": 256,
+        "width": 656,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1408,
+        1376
+      ],
+      "typeVersion": 1,
+      "id": "5142e1c3-27d4-48a2-a670-edce313a01bc",
+      "name": "Sticky Note19"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        960,
+        304
+      ],
+      "id": "b8384552-38ad-45b4-9e9c-10b4f43b0aa5",
+      "name": "Request have error"
+    },
+    {
+      "parameters": {
+        "operation": "addLabels",
+        "messageId": "={{ $('Gmail trigger').item.json.id }}",
+        "labelIds": [
+          "Label_5234641995347543628"
+        ]
+      },
+      "id": "09500878-da02-477f-a8e8-2c387050a2fe",
+      "name": "Add labels \"Replied by CS\"1",
+      "type": "n8n-nodes-base.gmail",
+      "position": [
+        176,
+        128
+      ],
+      "typeVersion": 2.1,
+      "webhookId": "18574739-07ad-4d44-a877-3dd01b77067f",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "MKNt51yMsiVMWsZk",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ",
+          "mode": "list",
+          "cachedResultName": "Workflow-n8n-data",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1566669895,
+          "mode": "list",
+          "cachedResultName": "Data_from_called_webhook",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ/edit#gid=1566669895"
+        },
+        "options": {}
+      },
+      "id": "b5966d1b-d788-459c-9820-bd951285c57a",
+      "name": "Get Latest Row3",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        592,
+        128
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "eB4asdCOgDeD0oaI",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://newaccount1612246773755.freshdesk.com/api/v2/tickets/{{ $json.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"tags\": [\"{{ $('If Escalated to CS').item.json.label }}\",\"{{ $('If Escalated to CS').item.json.customer_intent }}\"],\"priority\":3,\"status\": 3  }",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        912,
+        128
+      ],
+      "id": "f65ae1fc-0955-458a-8718-161cf84e57fc",
+      "name": "Update tag a ticket3",
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "92FmQm5lq0odOKbX",
+          "name": "Unnamed credential"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "amount": 8
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        416,
+        128
+      ],
+      "id": "1a03d143-75e4-4a80-aae4-4776f5abfdd9",
+      "name": "Wait3",
+      "webhookId": "406acf06-428b-4e71-862c-ed9f34b82f88"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\nreturn $input.all()[$input.all().length - 1];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        752,
+        128
+      ],
+      "id": "89509197-727b-401a-8784-e40c6b568606",
+      "name": "Extract data ticket3",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "removeLabels",
+        "messageId": "={{ $('Gmail trigger').item.json.id }}",
+        "labelIds": [
+          "Label_8992500823612717562"
+        ]
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -1472,
+        896
+      ],
+      "id": "db41c3d4-33f9-4069-a66b-8702bf2d401f",
+      "name": " Remove labeld AI_PROCESSING2",
+      "webhookId": "ab3ed8bc-a6bf-45a0-a109-03d4598ed92a",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "MKNt51yMsiVMWsZk",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ",
+          "mode": "list",
+          "cachedResultName": "Workflow-n8n-data",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 602971290,
+          "mode": "list",
+          "cachedResultName": "Logs_error_order",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ/edit#gid=602971290"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "is_customer": "={{ $('Set Data Result 1').first().json.is_customer }}",
+            "sentiment": "={{ $('Set Data Result 1').first().json.sentiment }}",
+            "customer_intent": "={{ $('Set Data Result 1').first().json.customer_intent }}",
+            "confidence_score": "={{ $('Set Data Result 1').first().json.confidence_score }}",
+            "order_number": "={{ $('Set Data Result 1').first().json.order_number }}",
+            "request_details": "={{ $('Set Data Result 1').first().json.request_details }}",
+            "threadId": "={{ $('Set Data Result 1').first().json.threadId }}",
+            "Subject": "={{ $('Set Data Result 1').first().json.Subject }}",
+            "Origin_Content": "={{ $('Gmail trigger').first().json.snippet }}",
+            "Time": "={{ DateTime.now().toLocal() }}",
+            "id_email": "={{ $('Gmail trigger').first().json.id }}",
+            "customer_name": "={{ $('Set Data Result 1').first().json.customer_name }}",
+            "label": "={{ $('Set Data Result 1').first().json.label }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id_email",
+              "displayName": "id_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "label",
+              "displayName": "label",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "is_customer",
+              "displayName": "is_customer",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "sentiment",
+              "displayName": "sentiment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "customer_intent",
+              "displayName": "customer_intent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "confidence_score",
+              "displayName": "confidence_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "order_number",
+              "displayName": "order_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "customer_name",
+              "displayName": "customer_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "request_details",
+              "displayName": "request_details",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "threadId",
+              "displayName": "threadId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Subject",
+              "displayName": "Subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Origin_Content",
+              "displayName": "Origin_Content",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Bot_reply",
+              "displayName": "Bot_reply",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Time",
+              "displayName": "Time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED"
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1184,
+        304
+      ],
+      "id": "7083ec4d-3dfc-423e-b747-319928f38c0e",
+      "name": "Logs in errors",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "eB4asdCOgDeD0oaI",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "thread",
+        "operation": "reply",
+        "threadId": "={{ $json.threadId }}",
+        "messageId": "={{ $json.id }}",
+        "message": "={{ $('Set content ro Reply').item.json.content }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        896,
+        1616
+      ],
+      "id": "eada37e8-6a73-4733-b468-7652022be666",
+      "name": "Reply to a message1",
+      "webhookId": "64f211f0-d4fd-4bc5-bb77-2d2f52921a3e",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "MKNt51yMsiVMWsZk",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -688,
+        1456
+      ],
+      "id": "9edc1ecd-fcc2-4139-90a3-c0ee2c9eac6f",
+      "name": "Alert to Discord"
+    },
+    {
+      "parameters": {
+        "content": "## Alert to Discord",
+        "height": 256,
+        "width": 576
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -736,
+        1376
+      ],
+      "typeVersion": 1,
+      "id": "681607bb-ee3e-4a83-b53a-15ee2aec3d7b",
+      "name": "Sticky Note27"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "guildId": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "channelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        1296,
+        144
+      ],
+      "id": "5ea4730d-bd88-4d96-8743-a57bfb10df17",
+      "name": "Send a message1",
+      "webhookId": "70c515e5-79ec-48f0-a33b-f1ccc03363b0",
+      "credentials": {
+        "discordBotApi": {
+          "id": "RxiOLQhK9PgLkOG6",
+          "name": "Discord Bot account"
+        }
+      },
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "guildId": {
+          "__rl": true,
+          "value": "https://discord.com/channels/1002246914789613659",
+          "mode": "url"
+        },
+        "channelId": {
+          "__rl": true,
+          "value": "https://discord.com/channels/1002246914789613659/1490896205771964417",
+          "mode": "url"
+        },
+        "content": "={{ \n`\n🚨 Alert 🚨\n**${$json.customer_intent}**\n${$json.request_details}\n`\n\n}}",
+        "options": {
+          "message_reference": "1490896597943324773"
+        },
+        "embeds": {
+          "values": []
+        }
+      },
+      "id": "dfcff536-7fb9-4a1f-849e-320f267bcc33",
+      "name": "Send to Discord Channel Thread",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        -96,
+        288
+      ],
+      "webhookId": "d2bc09d8-66ca-41f2-bbc1-ea26b186ee24",
+      "credentials": {
+        "discordBotApi": {
+          "id": "RxiOLQhK9PgLkOG6",
+          "name": "Discord Bot account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "guildId": {
+          "__rl": true,
+          "value": "https://discord.com/channels/1002246914789613659",
+          "mode": "url"
+        },
+        "channelId": {
+          "__rl": true,
+          "value": "https://discord.com/channels/1002246914789613659/1490896205771964417",
+          "mode": "url"
+        },
+        "content": "={{ \n`\n**${$('Information Extractor from list email').item.json.output.urgency == 'hight' ?  '🚨 Alert 🚨' : '⚠️ Warning ⚠️'}**\n\n|**${$('Information Extractor from list email').item.json.output.customer_intent}**|\n\n|${$('Information Extractor from list email').item.json.output.request_details}|\n`\n\n}}",
+        "options": {
+          "message_reference": "1490896597943324773"
+        },
+        "embeds": {
+          "values": []
+        }
+      },
+      "id": "516dcfb5-c8b6-4d85-96d3-4edbe217e322",
+      "name": "Send to Discord Channel Thread1",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        1456
+      ],
+      "webhookId": "d2bc09d8-66ca-41f2-bbc1-ea26b186ee24",
+      "credentials": {
+        "discordBotApi": {
+          "id": "RxiOLQhK9PgLkOG6",
+          "name": "Discord Bot account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "0cf9666e-11a4-40d3-8128-c520f14f10ee",
+              "leftValue": "",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -320,
+        304
+      ],
+      "id": "03e834a4-5c52-4357-86cf-f226de185e2d",
+      "name": "check intent to alert to discord"
+    },
+    {
+      "parameters": {
+        "fields": {
+          "values": [
+            {
+              "name": "label",
+              "stringValue": "={{ $json.output.label }}"
+            }
+          ]
+        },
+        "include": "none",
+        "options": {}
+      },
+      "id": "fe4568c6-ba89-4ce7-b94d-591578d5034b",
+      "name": "Set label values1",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        -2032,
+        1232
+      ],
+      "typeVersion": 3.2
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "6362254d-1190-494d-9ff7-23e3f7b58dbe",
+              "leftValue": "={{ $json.label !== \"Notification\" }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        -1840,
+        1232
+      ],
+      "id": "0e748a73-7cad-47e0-9b83-529102423659",
+      "name": "Filter"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ",
+          "mode": "list",
+          "cachedResultName": "Workflow-n8n-data",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1173107844,
+          "mode": "list",
+          "cachedResultName": "Estimate_cost_token_x",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ/edit#gid=1173107844"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id_email": "={{ $('Gmail trigger').item.json.id }}",
+            "output_res": "={{ JSON.stringify($('Information Extractor from list email').item.json.output) }}",
+            "input_prompt": "={{\n`\n### EMAIL THREAD: \n${  $('wrap-content-list-email').item.json.contents  }\nYou are an AI assistant specialized in analyzing customer email conversations.\nYour task is to:\n1. Summarize the entire conversation clearly and concisely.\n2. Classify the email.\n3. Extract all important structured information.\n4. Detect customer intent, tone, sentiment, and urgency.\n\n---\n\n### INPUT:\nYou will receive a full email thread (may contain multiple replies).\n\n---\n\n### OUTPUT FORMAT:\nReturn ONLY a valid JSON object.DO NOT return an array. Do not include explanations\nSchema:\n{\n  \"completed\": boolean,\n  \"summary\": string,\n  \"label\": string,\n  \"intent\": string,\n  \"order_id\": string | null,\n  \"customer_tone\": string,\n  \"is_customer\": boolean,\n  \"customer_intent\": \"Order Status Inquiry\" | \" Shipping Issue\" | \" Complaint\" | \"Refund Request\" | \"Product Inquiry\" | \"Change Request\" | \"Change Address shipping.\" | ,\n  \"confidence_score\": number (0 → 1),\n  \"sentiment\": \"positive | neutral | negative\",\n  \"order_number\": string | null,\n  \"customer_name\": string | null,\n  \"request_details\": string,\n  \"urgency\": \"low | medium | high\",\n  \"entities\": {\n    \"product\": string | null,\n    \"issue\": string | null,\n    \"dates\": string | null,\n    \"location\": string | null\n  },\n  \"number_token\": number,\n  \n}\n\n---\n\n### INSTRUCTIONS:\n\n#### 1. Summary\n- Summarize the full conversation in 1–3 sentences.\n- Focus on the main issue and current status.\n\n#### 2. Classification (label)\nChoose ONE:\n- \"Escalated to CS\" → requires human support (complaint, refund, issue, warning for cancelation in the future from customer, change adddress shipping )\n- \"Escalated to Bot\" → can be auto-replied (tracking, info request, ask about product items, get detail about some product) and confirm order is delivered.\n- \"Notification\" → non-customer-request emails (ads, system alerts, confirmations without questions)\n\n#### 3. Intent\nShort phrase describing the main purpose.\nINTENT (MUST match EXACT enum string, including spaces):\nChoose ONE of the following EXACT values:\n- \"Order Status Inquiry\"\n- \"Shipping Issue\"\n- \"Complaint\"\n- \"Refund Request\"\n- \"Product Inquiry\"\n- \"Change Request\"\n- \"Change Address shipping\"\n- \"Incorrect Information order\"\n#### 4. Extraction rules\n- order_number format: #BCMCXXXXXX\n- tracking_number: extract if exists, else null\n- customer_name: extract from signature or email\n\n#### 5. Tone & Sentiment\n- customer_tone: polite / neutral / angry / frustrated / urgent\n- sentiment:\n  - positive\n  - neutral\n  - negative\n\n#### 6. Urgency detection\n- high → angry, threatening, refund demand, delay complaint\n- medium → asking for update\n- low → normal inquiry\n\n#### 7. completed field\n- true → issue resolved or no further action needed\n- false → still waiting for response / unresolved\n\n#### 8. confidence_score\n- Between 0 and 1\n- Based on clarity of extracted data\n\n---\n#### 9. confidence_score\n\n---\n#### 10. number_token\nget totalTokens value\n\n\n### IMPORTANT:\n- If data is missing → return null\n- Do NOT hallucinate\n- Always return valid JSON\n- Keep summary short but informative\n---\nThis content:\n ${ $json.contents } \n\n`\n}}",
+            "Time": "={{ $now.toLocal() }}",
+            "input_token": "={{`=MROUND(LEN(INDIRECT(\"B\" & ROW())) / 4, 5)`}}",
+            "output_token": "={{`=MROUND(LEN(INDIRECT(\"C\" & ROW())) / 4, 5)`}}",
+            "input_cost": "={{`=(INDIRECT(\"D\" & ROW())) / 100)) * 0.0001`}}",
+            "output_cost": "={{`=(INDIRECT(\"D\" & ROW())) / 100)) * 0.0001`}}",
+            "cost": "={{`= SUM(INDIRECT(\"F\" & ROW()):INDIRECT(\"G\" & ROW()) )`}}",
+            "Date": "=  {{ $now.format('yyyy-MM-dd') }}"
+          },
+          "matchingColumns": [
+            "id_email"
+          ],
+          "schema": [
+            {
+              "id": "id_email",
+              "displayName": "id_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "input_prompt",
+              "displayName": "input_prompt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "output_res",
+              "displayName": "output_res",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "input_token",
+              "displayName": "input_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "output_token",
+              "displayName": "output_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "input_cost",
+              "displayName": "input_cost",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "output_cost",
+              "displayName": "output_cost",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "cost",
+              "displayName": "cost",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Time",
+              "displayName": "Time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Date",
+              "displayName": "Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -1984,
+        1056
+      ],
+      "id": "c10e3e33-a155-48ab-bbee-7ca4f279156d",
+      "name": "Append row in AI result",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "eB4asdCOgDeD0oaI",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ",
+          "mode": "list",
+          "cachedResultName": "Workflow-n8n-data",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1173107844,
+          "mode": "list",
+          "cachedResultName": "Estimate_cost_token_x",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1vr8REpEKq56-rKbU9iNIMOzqWpSWuK6eRxTzl52lwAQ/edit#gid=1173107844"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id_email": "={{ $('Gmail trigger').item.json.id }}",
+            "output_res": "={{ JSON.stringify($json) }}",
+            "input_prompt": "={{\n`\n### EMAIL THREAD: \n${  $('Assign labels for message').item.json.contents  }\nYou are an AI assistant specialized in analyzing customer email conversations.\nYour task is to:\n1. Summarize the entire conversation clearly and concisely.\n2. Classify the email.\n3. Extract all important structured information.\n4. Detect customer intent, tone, sentiment, and urgency.\n\n---\n\n### INPUT:\nYou will receive a full email thread (may contain multiple replies).\n\n---\n\n### OUTPUT FORMAT:\nReturn ONLY a valid JSON object.DO NOT return an array. Do not include explanations\nSchema:\n{\n  \"completed\": boolean,\n  \"summary\": string,\n  \"label\": string,\n  \"intent\": string,\n  \"order_id\": string | null,\n  \"customer_tone\": string,\n  \"is_customer\": boolean,\n  \"customer_intent\": \"Order Status Inquiry\" | \" Shipping Issue\" | \" Complaint\" | \"Refund Request\" | \"Product Inquiry\" | \"Change Request\" | \"Change Address shipping.\" | ,\n  \"confidence_score\": number (0 → 1),\n  \"sentiment\": \"positive | neutral | negative\",\n  \"order_number\": string | null,\n  \"customer_name\": string | null,\n  \"request_details\": string,\n  \"urgency\": \"low | medium | high\",\n  \"entities\": {\n    \"product\": string | null,\n    \"issue\": string | null,\n    \"dates\": string | null,\n    \"location\": string | null\n  },\n  \"number_token\": number,\n  \n}\n\n---\n\n### INSTRUCTIONS:\n\n#### 1. Summary\n- Summarize the full conversation in 1–3 sentences.\n- Focus on the main issue and current status.\n\n#### 2. Classification (label)\nChoose ONE:\n- \"Escalated to CS\" → requires human support (complaint, refund, issue, warning for cancelation in the future from customer, change adddress shipping )\n- \"Escalated to Bot\" → can be auto-replied (tracking, info request, ask about product items, get detail about some product) and confirm order is delivered.\n- \"Notification\" → non-customer-request emails (ads, system alerts, confirmations without questions)\n\n#### 3. Intent\nShort phrase describing the main purpose.\nINTENT (MUST match EXACT enum string, including spaces):\nChoose ONE of the following EXACT values:\n- \"Order Status Inquiry\"\n- \"Shipping Issue\"\n- \"Complaint\"\n- \"Refund Request\"\n- \"Product Inquiry\"\n- \"Change Request\"\n- \"Change Address shipping\"\n- \"Incorrect Information order\"\n#### 4. Extraction rules\n- order_number format: #BCMCXXXXXX\n- tracking_number: extract if exists, else null\n- customer_name: extract from signature or email\n\n#### 5. Tone & Sentiment\n- customer_tone: polite / neutral / angry / frustrated / urgent\n- sentiment:\n  - positive\n  - neutral\n  - negative\n\n#### 6. Urgency detection\n- high → angry, threatening, refund demand, delay complaint\n- medium → asking for update\n- low → normal inquiry\n\n#### 7. completed field\n- true → issue resolved or no further action needed\n- false → still waiting for response / unresolved\n\n#### 8. confidence_score\n- Between 0 and 1\n- Based on clarity of extracted data\n\n---\n#### 9. confidence_score\n\n---\n#### 10. number_token\nget totalTokens value\n\n\n### IMPORTANT:\n- If data is missing → return null\n- Do NOT hallucinate\n- Always return valid JSON\n- Keep summary short but informative\n---\nThis content:\n ${ $json.contents } \n\n`\n}}",
+            "Time": "={{ $now.toLocal() }}",
+            "input_token": "={{`=MROUND(LEN(INDIRECT(\"B\" & ROW())) / 3,5)`}}",
+            "output_token": "={{`=MROUND(LEN(INDIRECT(\"C\" & ROW())) / 3, 5)`}}",
+            "input_cost": "={{`= (INDIRECT(\"D\" & ROW()) / 1000) * 0.0001`}}",
+            "output_cost": "={{`= (INDIRECT(\"E\" & ROW()) / 1000) * 0.0001`}}",
+            "cost": "={{`= SUM(INDIRECT(\"F\" & ROW()):INDIRECT(\"G\" & ROW()) )`}}",
+            "Date": "={{ $now.format('yyyy-MM-dd') }}"
+          },
+          "matchingColumns": [
+            "id_email"
+          ],
+          "schema": [
+            {
+              "id": "id_email",
+              "displayName": "id_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "input_prompt",
+              "displayName": "input_prompt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "output_res",
+              "displayName": "output_res",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "input_token",
+              "displayName": "input_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "output_token",
+              "displayName": "output_token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "input_cost",
+              "displayName": "input_cost",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "output_cost",
+              "displayName": "output_cost",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "cost",
+              "displayName": "cost",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Time",
+              "displayName": "Time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Date",
+              "displayName": "Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -1968,
+        448
+      ],
+      "id": "da217853-55a9-4316-9f7f-d78299ffc9aa",
+      "name": "Append row in AI result1",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "eB4asdCOgDeD0oaI",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "JSON Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Assign labels for message",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Assign labels for message",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail trigger": {
+      "main": [
+        [
+          {
+            "node": "If label = 'Replied by CS'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get all labels": {
+      "main": [
+        [
+          {
+            "node": "Merge corresponding labels",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set label values": {
+      "main": [
+        [
+          {
+            "node": "Append row in \"Log in run time\"",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "If validate lable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate label IDs": {
+      "main": [
+        [
+          {
+            "node": "Add labels \"Escalated to ...\"",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get message content": {
+      "main": [
+        [
+          {
+            "node": "Assign labels for message",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Add labels for AI_PROCESSING",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assign labels for message": {
+      "main": [
+        [
+          {
+            "node": "Set label values",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Append row in AI result1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split out assigned labels": {
+      "main": [
+        [
+          {
+            "node": "Merge corresponding labels",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge corresponding labels": {
+      "main": [
+        [
+          {
+            "node": "Wait1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Aggregate label IDs1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get a thread": {
+      "main": [
+        [
+          {
+            "node": "Check length message in thread <=1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Information Extractor from list email",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check length message in thread <=1": {
+      "main": [
+        [
+          {
+            "node": "Get message content",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If validate lable": {
+      "main": [
+        [
+          {
+            "node": "Get all labels",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Split out assigned labels",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Operation, do nothing2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle get list all email infor from list": {
+      "main": [
+        [
+          {
+            "node": "wrap-content-list-email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Order ID condition": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send email require provide order id",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Condition before pass to Bot reply": {
+      "main": [
+        [
+          {
+            "node": "Check Order ID condition",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "wrap-content-list-email": {
+      "main": [
+        [
+          {
+            "node": "Information Extractor from list email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Information Extractor from list email": {
+      "main": [
+        [
+          {
+            "node": "Set label values1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Append row in AI result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Latest Row": {
+      "main": [
+        [
+          {
+            "node": "Extract data ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Get Latest Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If label = 'Replied by CS'": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Get a thread",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check label == \"Escalated to CS\"": {
+      "main": [
+        [
+          {
+            "node": "Add labels \"Replied by CS\"",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get all labels1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Edit Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat2": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Value JSON data result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get all labels1": {
+      "main": [
+        [
+          {
+            "node": "Merge corresponding labels1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split out assigned labels1": {
+      "main": [
+        [
+          {
+            "node": "Merge corresponding labels1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge corresponding labels1": {
+      "main": [
+        [
+          {
+            "node": "Aggregate label IDs",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add labels \"Escalated to ...\"": {
+      "main": [
+        [
+          {
+            "node": " Remove labeld AI_PROCESSING",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Check label == \"Replied by CS\" && \"Escalated to CS\"",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check label == \"Replied by CS\" && \"Escalated to CS\"": {
+      "main": [
+        [
+          {
+            "node": "Redirect to CS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle get list all email infor from list",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields1": {
+      "main": [
+        [
+          {
+            "node": "Split out assigned labels1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Value JSON data result": {
+      "main": [
+        [
+          {
+            "node": "Check error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check error": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Set content ro Reply1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send email require provide order id": {
+      "main": [
+        [
+          {
+            "node": "Set content ro Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update tag a ticket": {
+      "main": [
+        [
+          {
+            "node": "Set Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract data ticket": {
+      "main": [
+        [
+          {
+            "node": "Update tag a ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Data": {
+      "main": [
+        [
+          {
+            "node": "Condition before pass to Bot reply",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Append row in \"Result\"",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set content ro Reply": {
+      "main": [
+        [
+          {
+            "node": "Append row in \"Finished Result\"",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Add labels \"Replied by Bot\"",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate label IDs1": {
+      "main": [
+        [
+          {
+            "node": "Add labels \"Escalated to ...\"1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Latest Row1": {
+      "main": [
+        [
+          {
+            "node": "Extract data ticket1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update tag a ticket1": {
+      "main": [
+        [
+          {
+            "node": "Set Data Result 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait1": {
+      "main": [
+        [
+          {
+            "node": "Get Latest Row1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add labels \"Escalated to ...\"1": {
+      "main": [
+        [
+          {
+            "node": " Remove labeld AI_PROCESSING1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract data ticket1": {
+      "main": [
+        [
+          {
+            "node": "Update tag a ticket1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set content ro Reply1": {
+      "main": [
+        [
+          {
+            "node": "Append row in \"Finished Result\"1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent1": {
+      "main": [
+        [
+          {
+            "node": "Value JSON data result1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat3": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Value JSON data result1": {
+      "main": [
+        [
+          {
+            "node": "Check error1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Escalated to CS": {
+      "main": [
+        [
+          {
+            "node": "Add labels \"Replied by CS\"1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check error1": {
+      "main": [
+        [
+          {
+            "node": "Set content ro Reply2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Request have error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Data Result 1": {
+      "main": [
+        [
+          {
+            "node": "If Escalated to CS",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Append row in \"Result\"1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set content ro Reply2": {
+      "main": [
+        [
+          {
+            "node": "Append row in \"Finished Result\"2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Set content ro Reply if not order number",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set content ro Reply if not order number": {
+      "main": [
+        [
+          {
+            "node": "Append row in \"Finished Result\"3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Latest Row2": {
+      "main": [
+        [
+          {
+            "node": "Extract data ticket2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait2": {
+      "main": [
+        [
+          {
+            "node": "Get Latest Row2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract data ticket2": {
+      "main": [
+        [
+          {
+            "node": "Update tag a ticket2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add labels \"Replied by CS\"": {
+      "main": [
+        [
+          {
+            "node": "Wait2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Latest Row3": {
+      "main": [
+        [
+          {
+            "node": "Extract data ticket3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait3": {
+      "main": [
+        [
+          {
+            "node": "Get Latest Row3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract data ticket3": {
+      "main": [
+        [
+          {
+            "node": "Update tag a ticket3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Request have error": {
+      "main": [
+        [
+          {
+            "node": "Logs in errors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Operation, do nothing2": {
+      "main": [
+        [
+          {
+            "node": " Remove labeld AI_PROCESSING2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert to Discord": {
+      "main": [
+        [
+          {
+            "node": "Send to Discord Channel Thread1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update tag a ticket2": {
+      "main": [
+        [
+          {
+            "node": "Alert to Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set label values1": {
+      "main": [
+        [
+          {
+            "node": "Append row in \"Log in run time\"1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter": {
+      "main": [
+        [
+          {
+            "node": "Check label == \"Escalated to CS\"",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "timezone": "Asia/Ho_Chi_Minh",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": true,
+    "saveExecutionProgress": true
+  },
+  "versionId": "5d53a240-09e9-4e3a-9ec9-7a8e7f7f82ef",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "cf08d2ab3092fff76b2992ac93b5f8772a75922bcadc2a6d43bab3c7f176a116"
+  },
+  "id": "7CwJDflyF2oqgXTp",
+  "tags": [
+    {
+      "updatedAt": "2026-04-08T09:31:26.465Z",
+      "createdAt": "2026-04-08T09:31:26.465Z",
+      "id": "ZFFEU7tma7gAkujG",
+      "name": "main"
+    },
+    {
+      "updatedAt": "2026-04-08T09:31:26.611Z",
+      "createdAt": "2026-04-08T09:31:26.611Z",
+      "id": "Mmb9uK4JEePCECIX",
+      "name": "GD1"
+    }
+  ]
+}
